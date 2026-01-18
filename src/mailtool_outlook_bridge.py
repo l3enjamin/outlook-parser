@@ -19,6 +19,7 @@ Usage:
 """
 
 import win32com.client
+import pywintypes
 import json
 import sys
 import argparse
@@ -28,6 +29,24 @@ from pathlib import Path
 
 class OutlookBridge:
     """Bridge to Outlook application via COM"""
+
+    @staticmethod
+    def _safe_get_attr(obj, attr, default=None):
+        """
+        Safely get an attribute from a COM object, handling COM errors gracefully
+
+        Args:
+            obj: COM object
+            attr: Attribute name to get
+            default: Default value if attribute access fails
+
+        Returns:
+            Attribute value or default
+        """
+        try:
+            return getattr(obj, attr, default)
+        except (Exception, pywintypes.com_error):
+            return default
 
     def __init__(self):
         """
@@ -209,35 +228,53 @@ class OutlookBridge:
         calendar = self.get_calendar()
         items = calendar.Items
 
+        # CRITICAL: Filter to only appointment items before any other operations
+        # This prevents COM errors when encountering meeting requests/responses
+        items = items.Restrict("[MessageClass] >= 'IPM.Appointment' AND [MessageClass] < 'IPM.Appointment{'")
+
         # CRITICAL: Enable recurrence expansion BEFORE sorting
         # Must sort ascending for recurrence to work properly
         items.IncludeRecurrences = True
         items.Sort("[Start]")  # Ascending for recurrence
 
+        # CRITICAL FIX: Apply Restrict BEFORE iterating to avoid "Calendar Bomb"
+        # Without this, recurring meetings without end dates generate infinite items
+        if not all_events:
+            start_date = datetime.now()
+            end_date = start_date + timedelta(days=days)
+            # Jet SQL format for dates: MM/DD/YYYY HH:MM
+            # Use Restrict to filter at COM level before Python iteration
+            filter_str = (
+                f"[Start] <= '{end_date.strftime('%m/%d/%Y %H:%M')}' "
+                f"AND [End] >= '{start_date.strftime('%m/%d/%Y %H:%M')}'"
+            )
+            items = items.Restrict(filter_str)
+
         events = []
         for item in items:
             try:
-                start = item.Start if hasattr(item, 'Start') else None
-                end = item.End if hasattr(item, 'End') else None
+                # Use safe attribute access to handle COM errors
+                start = self._safe_get_attr(item, 'Start')
+                end = self._safe_get_attr(item, 'End')
 
                 # Skip if no start time
                 if not start:
                     continue
 
-                # Filter by date range unless --all is specified
+                # Additional Python-level filtering for safety (in case Restrict wasn't applied)
                 if not all_events:
                     start_date = datetime.now()
                     end_date = start_date + timedelta(days=days)
                     if not (start >= start_date and start <= end_date):
                         continue
 
-                # Get attendees
-                required_attendees = item.RequiredAttendees if hasattr(item, 'RequiredAttendees') else ""
-                optional_attendees = item.OptionalAttendees if hasattr(item, 'OptionalAttendees') else ""
+                # Get attendees (safe access)
+                required_attendees = self._safe_get_attr(item, 'RequiredAttendees', "")
+                optional_attendees = self._safe_get_attr(item, 'OptionalAttendees', "")
 
                 # Get meeting status
                 # ResponseStatus: 0=None, 1=Organizer, 2=Tentative, 3=Accepted, 4=Declined, 5=NotResponded
-                response_status = item.ResponseStatus if hasattr(item, 'ResponseStatus') else None
+                response_status = self._safe_get_attr(item, 'ResponseStatus')
                 response_status_map = {
                     0: "None",
                     1: "Organizer",
@@ -248,7 +285,7 @@ class OutlookBridge:
                 }
 
                 # MeetingStatus: 0=Non-meeting, 1=Meeting, 2=Received, 3=Canceled
-                meeting_status = item.MeetingStatus if hasattr(item, 'MeetingStatus') else None
+                meeting_status = self._safe_get_attr(item, 'MeetingStatus')
                 meeting_status_map = {
                     0: "NonMeeting",
                     1: "Meeting",
@@ -257,22 +294,22 @@ class OutlookBridge:
                 }
 
                 event = {
-                    "entry_id": item.EntryID,
-                    "subject": item.Subject if hasattr(item, 'Subject') else "(No Subject)",
+                    "entry_id": self._safe_get_attr(item, 'EntryID', ''),
+                    "subject": self._safe_get_attr(item, 'Subject', '(No Subject)'),
                     "start": start.strftime("%Y-%m-%d %H:%M:%S") if start else None,
                     "end": end.strftime("%Y-%m-%d %H:%M:%S") if end else None,
-                    "location": item.Location if hasattr(item, 'Location') else "",
-                    "organizer": item.Organizer if hasattr(item, 'Organizer') else None,
-                    "all_day": item.AllDayEvent if hasattr(item, 'AllDayEvent') else False,
+                    "location": self._safe_get_attr(item, 'Location', ''),
+                    "organizer": self._safe_get_attr(item, 'Organizer'),
+                    "all_day": self._safe_get_attr(item, 'AllDayEvent', False),
                     "required_attendees": required_attendees,
                     "optional_attendees": optional_attendees,
                     "response_status": response_status_map.get(response_status, "Unknown"),
                     "meeting_status": meeting_status_map.get(meeting_status, "Unknown"),
-                    "response_requested": item.ResponseRequested if hasattr(item, 'ResponseRequested') else False
+                    "response_requested": self._safe_get_attr(item, 'ResponseRequested', False)
                 }
                 events.append(event)
-            except Exception as e:
-                # Skip items that cause errors
+            except (Exception, BaseException) as e:
+                # Skip items that cause errors (including COM fatal errors)
                 continue
 
         return events
@@ -293,7 +330,7 @@ class OutlookBridge:
             save_draft: If True, save to Drafts instead of sending
 
         Returns:
-            True if successful
+            Draft entry ID if saved, True if sent, False if failed
         """
         try:
             mail = self.outlook.CreateItem(0)  # 0 = olMailItem
@@ -309,6 +346,8 @@ class OutlookBridge:
                 mail.BCC = bcc
 
             # Add attachments
+            # NOTE: WSL path translation handled in outlook.sh wrapper
+            # Windows Python expects Windows paths (C:\path\to\file)
             if file_paths:
                 for file_path in file_paths:
                     mail.Attachments.Add(file_path)
@@ -865,43 +904,70 @@ class OutlookBridge:
             print(f"Error searching emails: {e}", file=sys.stderr)
             return []
 
-    def get_free_busy(self, entry_id, start_date, end_date):
+    def get_free_busy(self, email_address=None, start_date=None, end_date=None, entry_id=None):
         """
-        Get free/busy status for an appointment
+        Get free/busy status for an email address
 
         Args:
-            entry_id: Appointment entry ID to check
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
+            email_address: Email address to check (optional, defaults to current user)
+            start_date: Start date (YYYY-MM-DD) or datetime object (optional, defaults to today)
+            end_date: End date (YYYY-MM-DD) or datetime object (optional, defaults to start + 1 day)
+            entry_id: DEPRECATED - Appointment entry ID (legacy, use email_address instead)
 
         Returns:
             Dictionary with free/busy information
         """
-        item = self.get_item_by_id(entry_id)
-        if item:
-            try:
-                # Get recipient
-                if hasattr(item, 'RequiredAttendees') and item.RequiredAttendees:
-                    # Parse first attendee
+        try:
+            # Handle legacy entry_id parameter (extract first required attendee)
+            if entry_id and not email_address:
+                item = self.get_item_by_id(entry_id)
+                if item and hasattr(item, 'RequiredAttendees') and item.RequiredAttendees:
                     attendees = item.RequiredAttendees.split(';')
                     if attendees:
-                        first_attendee = attendees[0].strip()
-                        # Try to get their free/busy
-                        try:
-                            recipient = self.namespace.CreateRecipient("olExchange", first_attendee)
-                            freebusy = recipient.FreeBusy(start_date, end_date)
-                            return {
-                                "entry_id": entry_id,
-                                "attendee": first_attendee,
-                                "start_date": start_date,
-                                "end_date": end_date,
-                                "free_busy": freebusy
-                            }
-                        except Exception as e:
-                            print(f"Error getting free/busy: {e}", file=sys.stderr)
-            except Exception as e:
-                print(f"Error with get_free_busy: {e}", file=sys.stderr)
-        return None
+                        email_address = attendees[0].strip()
+
+            # Default to current user if no email provided
+            if not email_address:
+                email_address = self.namespace.CurrentUser.Address
+
+            # Default to today if no dates provided
+            if not start_date:
+                start_date = datetime.now()
+            elif isinstance(start_date, str):
+                start_date = datetime.strptime(start_date, "%Y-%m-%d")
+
+            if not end_date:
+                end_date = start_date + timedelta(days=1)
+            elif isinstance(end_date, str):
+                end_date = datetime.strptime(end_date, "%Y-%m-%d")
+
+            # Create recipient and get free/busy
+            recipient = self.namespace.CreateRecipient(email_address)
+            if recipient.Resolve():
+                # FreeBusy returns a string with time slots and status
+                # 0=Free, 1=Tentative, 2=Busy, 3=Out of Office, 4=Working Elsewhere
+                freebusy = recipient.FreeBusy(start_date, 60 * 24)  # 1440 minutes = 1 day
+                return {
+                    "email": email_address,
+                    "start_date": start_date.strftime("%Y-%m-%d"),
+                    "end_date": end_date.strftime("%Y-%m-%d"),
+                    "free_busy": freebusy,
+                    "resolved": True
+                }
+            else:
+                return {
+                    "email": email_address,
+                    "start_date": start_date.strftime("%Y-%m-%d"),
+                    "end_date": end_date.strftime("%Y-%m-%d"),
+                    "error": "Could not resolve email address",
+                    "resolved": False
+                }
+        except Exception as e:
+            return {
+                "email": email_address if email_address else "unknown",
+                "error": str(e),
+                "resolved": False
+            }
 
 
 def main():
@@ -996,9 +1062,10 @@ def main():
 
     # Free/busy command
     freebusy_parser = subparsers.add_parser("freebusy", help="Get free/busy status")
-    freebusy_parser.add_argument("--id", required=True, help="Appointment or email entry ID")
-    freebusy_parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
-    freebusy_parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
+    freebusy_parser.add_argument("--email", help="Email address to check (defaults to current user)")
+    freebusy_parser.add_argument("--start", help="Start date (YYYY-MM-DD, defaults to today)")
+    freebusy_parser.add_argument("--end", help="End date (YYYY-MM-DD, defaults to tomorrow)")
+    freebusy_parser.add_argument("--id", help="DEPRECATED: Appointment entry ID (use --email instead)")
 
     # Edit appointment command
     edit_appt_parser = subparsers.add_parser("edit-appt", help="Edit an appointment")
@@ -1184,12 +1251,13 @@ def main():
             sys.exit(1)
 
     elif args.command == "freebusy":
-        freebusy = bridge.get_free_busy(args.id, args.start, args.end)
-        if freebusy:
-            print(json.dumps(freebusy, indent=2))
-        else:
-            print(json.dumps({"status": "error", "message": "Could not get free/busy information"}))
-            sys.exit(1)
+        freebusy = bridge.get_free_busy(
+            email_address=getattr(args, 'email', None),
+            start_date=getattr(args, 'start', None),
+            end_date=getattr(args, 'end', None),
+            entry_id=getattr(args, 'id', None)
+        )
+        print(json.dumps(freebusy, indent=2))
 
     elif args.command == "tasks":
         tasks = bridge.list_tasks()
