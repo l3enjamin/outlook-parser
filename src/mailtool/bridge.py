@@ -20,13 +20,10 @@ Usage:
 
 # Modified to test pre-commit hook
 
-import win32com.client
-import pywintypes
-import json
 import sys
-import argparse
 from datetime import datetime, timedelta
-from pathlib import Path
+
+import win32com.client
 
 
 class OutlookBridge:
@@ -47,7 +44,8 @@ class OutlookBridge:
         """
         try:
             return getattr(obj, attr, default)
-        except (Exception, pywintypes.com_error):
+        # Catch pywintypes.com_error if available, otherwise fall back to Exception
+        except Exception:
             return default
 
     def __init__(self):
@@ -64,10 +62,13 @@ class OutlookBridge:
             # Outlook might not be running - try to launch it
             try:
                 self.outlook = win32com.client.Dispatch("Outlook.Application")
-            except Exception as e2:
-                print(f"Error: Could not connect to or launch Outlook.", file=sys.stderr)
+            except Exception:
+                print("Error: Could not connect to or launch Outlook.", file=sys.stderr)
                 print(f"Details: {e}", file=sys.stderr)
-                print(f"Hint: Make sure Outlook is installed and you can launch it manually.", file=sys.stderr)
+                print(
+                    "Hint: Make sure Outlook is installed and you can launch it manually.",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
 
         self.namespace = self.outlook.GetNamespace("MAPI")
@@ -102,12 +103,12 @@ class OutlookBridge:
             # Try to get subfolder of inbox
             folder = inbox.Folders[folder_name]
             return folder
-        except:
+        except Exception:
             try:
                 # Try to get from root
                 folder = self.namespace.Folders.Item(1).Folders[folder_name]
                 return folder
-            except:
+            except Exception:
                 return None
 
     def get_item_by_id(self, entry_id):
@@ -122,7 +123,7 @@ class OutlookBridge:
         """
         try:
             return self.namespace.GetItemFromID(entry_id)
-        except Exception as e:
+        except Exception:
             return None
 
     def resolve_smtp_address(self, mail_item):
@@ -136,14 +137,28 @@ class OutlookBridge:
             SMTP email address string
         """
         try:
-            if hasattr(mail_item, 'SenderEmailType') and mail_item.SenderEmailType == "EX":
-                if hasattr(mail_item, 'Sender') and hasattr(mail_item.Sender, 'GetExchangeUser'):
-                    exchange_user = mail_item.Sender.GetExchangeUser()
-                    if hasattr(exchange_user, 'PrimarySmtpAddress'):
-                        return exchange_user.PrimarySmtpAddress
-            return mail_item.SenderEmailAddress if hasattr(mail_item, 'SenderEmailAddress') else ""
+            if (
+                (
+                    hasattr(mail_item, "SenderEmailType")
+                    and mail_item.SenderEmailType == "EX"
+                )
+                and hasattr(mail_item, "Sender")
+                and hasattr(mail_item.Sender, "GetExchangeUser")
+            ):
+                exchange_user = mail_item.Sender.GetExchangeUser()
+                if hasattr(exchange_user, "PrimarySmtpAddress"):
+                    return exchange_user.PrimarySmtpAddress
+            return (
+                mail_item.SenderEmailAddress
+                if hasattr(mail_item, "SenderEmailAddress")
+                else ""
+            )
         except Exception:
-            return mail_item.SenderEmailAddress if hasattr(mail_item, 'SenderEmailAddress') else ""
+            return (
+                mail_item.SenderEmailAddress
+                if hasattr(mail_item, "SenderEmailAddress")
+                else ""
+            )
 
     def list_emails(self, limit=10, folder="Inbox"):
         """
@@ -177,13 +192,15 @@ class OutlookBridge:
                     "subject": item.Subject,
                     "sender": self.resolve_smtp_address(item),
                     "sender_name": item.SenderName,
-                    "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if item.ReceivedTime else None,
+                    "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                    if item.ReceivedTime
+                    else None,
                     "unread": item.Unread,
-                    "has_attachments": item.Attachments.Count > 0
+                    "has_attachments": item.Attachments.Count > 0,
                 }
                 emails.append(email)
                 count += 1
-            except Exception as e:
+            except Exception:
                 # Skip items that can't be accessed
                 continue
 
@@ -209,8 +226,10 @@ class OutlookBridge:
                     "sender_name": item.SenderName,
                     "body": item.Body,
                     "html_body": item.HTMLBody,
-                    "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if item.ReceivedTime else None,
-                    "has_attachments": item.Attachments.Count > 0
+                    "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                    if item.ReceivedTime
+                    else None,
+                    "has_attachments": item.Attachments.Count > 0,
                 }
             except Exception:
                 return None
@@ -232,7 +251,9 @@ class OutlookBridge:
 
         # CRITICAL: Filter to only appointment items before any other operations
         # This prevents COM errors when encountering meeting requests/responses
-        items = items.Restrict("[MessageClass] >= 'IPM.Appointment' AND [MessageClass] < 'IPM.Appointment{'")
+        items = items.Restrict(
+            "[MessageClass] >= 'IPM.Appointment' AND [MessageClass] < 'IPM.Appointment{'"
+        )
 
         # CRITICAL: Enable recurrence expansion BEFORE sorting
         # Must sort ascending for recurrence to work properly
@@ -256,8 +277,8 @@ class OutlookBridge:
         for item in items:
             try:
                 # Use safe attribute access to handle COM errors
-                start = self._safe_get_attr(item, 'Start')
-                end = self._safe_get_attr(item, 'End')
+                start = self._safe_get_attr(item, "Start")
+                end = self._safe_get_attr(item, "End")
 
                 # Skip if no start time
                 if not start:
@@ -271,53 +292,66 @@ class OutlookBridge:
                         continue
 
                 # Get attendees (safe access)
-                required_attendees = self._safe_get_attr(item, 'RequiredAttendees', "")
-                optional_attendees = self._safe_get_attr(item, 'OptionalAttendees', "")
+                required_attendees = self._safe_get_attr(item, "RequiredAttendees", "")
+                optional_attendees = self._safe_get_attr(item, "OptionalAttendees", "")
 
                 # Get meeting status
                 # ResponseStatus: 0=None, 1=Organizer, 2=Tentative, 3=Accepted, 4=Declined, 5=NotResponded
-                response_status = self._safe_get_attr(item, 'ResponseStatus')
+                response_status = self._safe_get_attr(item, "ResponseStatus")
                 response_status_map = {
                     0: "None",
                     1: "Organizer",
                     2: "Tentative",
                     3: "Accepted",
                     4: "Declined",
-                    5: "NotResponded"
+                    5: "NotResponded",
                 }
 
                 # MeetingStatus: 0=Non-meeting, 1=Meeting, 2=Received, 3=Canceled
-                meeting_status = self._safe_get_attr(item, 'MeetingStatus')
+                meeting_status = self._safe_get_attr(item, "MeetingStatus")
                 meeting_status_map = {
                     0: "NonMeeting",
                     1: "Meeting",
                     2: "Received",
-                    3: "Canceled"
+                    3: "Canceled",
                 }
 
                 event = {
-                    "entry_id": self._safe_get_attr(item, 'EntryID', ''),
-                    "subject": self._safe_get_attr(item, 'Subject', '(No Subject)'),
+                    "entry_id": self._safe_get_attr(item, "EntryID", ""),
+                    "subject": self._safe_get_attr(item, "Subject", "(No Subject)"),
                     "start": start.strftime("%Y-%m-%d %H:%M:%S") if start else None,
                     "end": end.strftime("%Y-%m-%d %H:%M:%S") if end else None,
-                    "location": self._safe_get_attr(item, 'Location', ''),
-                    "organizer": self._safe_get_attr(item, 'Organizer'),
-                    "all_day": self._safe_get_attr(item, 'AllDayEvent', False),
+                    "location": self._safe_get_attr(item, "Location", ""),
+                    "organizer": self._safe_get_attr(item, "Organizer"),
+                    "all_day": self._safe_get_attr(item, "AllDayEvent", False),
                     "required_attendees": required_attendees,
                     "optional_attendees": optional_attendees,
-                    "response_status": response_status_map.get(response_status, "Unknown"),
+                    "response_status": response_status_map.get(
+                        response_status, "Unknown"
+                    ),
                     "meeting_status": meeting_status_map.get(meeting_status, "Unknown"),
-                    "response_requested": self._safe_get_attr(item, 'ResponseRequested', False)
+                    "response_requested": self._safe_get_attr(
+                        item, "ResponseRequested", False
+                    ),
                 }
                 events.append(event)
-            except (Exception, BaseException) as e:
+            except (Exception, BaseException):
                 # Skip items that cause errors (including COM fatal errors)
                 continue
 
         return events
 
-    def send_email(self, to, subject, body, cc=None, bcc=None, html_body=None,
-                 file_paths=None, save_draft=False):
+    def send_email(
+        self,
+        to,
+        subject,
+        body,
+        cc=None,
+        bcc=None,
+        html_body=None,
+        file_paths=None,
+        save_draft=False,
+    ):
         """
         Send an email (or save as draft)
 
@@ -502,6 +536,7 @@ class OutlookBridge:
         downloaded = []
         try:
             import os
+
             os.makedirs(download_dir, exist_ok=True)
 
             for i in range(item.Attachments.Count):
@@ -515,8 +550,17 @@ class OutlookBridge:
             print(f"Error downloading attachments: {e}", file=sys.stderr)
             return []
 
-    def create_appointment(self, subject, start, end, location="", body="", all_day=False,
-                         required_attendees=None, optional_attendees=None):
+    def create_appointment(
+        self,
+        subject,
+        start,
+        end,
+        location="",
+        body="",
+        all_day=False,
+        required_attendees=None,
+        optional_attendees=None,
+    ):
         """
         Create a calendar appointment
 
@@ -551,8 +595,17 @@ class OutlookBridge:
             print(f"Error creating appointment: {e}", file=sys.stderr)
             return None
 
-    def edit_appointment(self, entry_id, required_attendees=None, optional_attendees=None,
-                        subject=None, start=None, end=None, location=None, body=None):
+    def edit_appointment(
+        self,
+        entry_id,
+        required_attendees=None,
+        optional_attendees=None,
+        subject=None,
+        start=None,
+        end=None,
+        location=None,
+        body=None,
+    ):
         """
         Edit an existing appointment
 
@@ -607,27 +660,59 @@ class OutlookBridge:
         item = self.get_item_by_id(entry_id)
         if item:
             try:
-                required_attendees = item.RequiredAttendees if hasattr(item, 'RequiredAttendees') else ""
-                optional_attendees = item.OptionalAttendees if hasattr(item, 'OptionalAttendees') else ""
-                response_status = item.ResponseStatus if hasattr(item, 'ResponseStatus') else None
-                response_status_map = {0: "None", 1: "Organizer", 2: "Tentative", 3: "Accepted", 4: "Declined", 5: "NotResponded"}
-                meeting_status = item.MeetingStatus if hasattr(item, 'MeetingStatus') else None
-                meeting_status_map = {0: "NonMeeting", 1: "Meeting", 2: "Received", 3: "Canceled"}
+                required_attendees = (
+                    item.RequiredAttendees if hasattr(item, "RequiredAttendees") else ""
+                )
+                optional_attendees = (
+                    item.OptionalAttendees if hasattr(item, "OptionalAttendees") else ""
+                )
+                response_status = (
+                    item.ResponseStatus if hasattr(item, "ResponseStatus") else None
+                )
+                response_status_map = {
+                    0: "None",
+                    1: "Organizer",
+                    2: "Tentative",
+                    3: "Accepted",
+                    4: "Declined",
+                    5: "NotResponded",
+                }
+                meeting_status = (
+                    item.MeetingStatus if hasattr(item, "MeetingStatus") else None
+                )
+                meeting_status_map = {
+                    0: "NonMeeting",
+                    1: "Meeting",
+                    2: "Received",
+                    3: "Canceled",
+                }
 
                 return {
                     "entry_id": item.EntryID,
-                    "subject": item.Subject if hasattr(item, 'Subject') else "(No Subject)",
-                    "start": item.Start.strftime("%Y-%m-%d %H:%M:%S") if hasattr(item, 'Start') and item.Start else None,
-                    "end": item.End.strftime("%Y-%m-%d %H:%M:%S") if hasattr(item, 'End') and item.End else None,
-                    "location": item.Location if hasattr(item, 'Location') else "",
-                    "organizer": item.Organizer if hasattr(item, 'Organizer') else None,
-                    "body": item.Body if hasattr(item, 'Body') else "",
-                    "all_day": item.AllDayEvent if hasattr(item, 'AllDayEvent') else False,
+                    "subject": item.Subject
+                    if hasattr(item, "Subject")
+                    else "(No Subject)",
+                    "start": item.Start.strftime("%Y-%m-%d %H:%M:%S")
+                    if hasattr(item, "Start") and item.Start
+                    else None,
+                    "end": item.End.strftime("%Y-%m-%d %H:%M:%S")
+                    if hasattr(item, "End") and item.End
+                    else None,
+                    "location": item.Location if hasattr(item, "Location") else "",
+                    "organizer": item.Organizer if hasattr(item, "Organizer") else None,
+                    "body": item.Body if hasattr(item, "Body") else "",
+                    "all_day": item.AllDayEvent
+                    if hasattr(item, "AllDayEvent")
+                    else False,
                     "required_attendees": required_attendees,
                     "optional_attendees": optional_attendees,
-                    "response_status": response_status_map.get(response_status, "Unknown"),
+                    "response_status": response_status_map.get(
+                        response_status, "Unknown"
+                    ),
                     "meeting_status": meeting_status_map.get(meeting_status, "Unknown"),
-                    "response_requested": item.ResponseRequested if hasattr(item, 'ResponseRequested') else False
+                    "response_requested": item.ResponseRequested
+                    if hasattr(item, "ResponseRequested")
+                    else False,
                 }
             except Exception:
                 pass
@@ -650,7 +735,7 @@ class OutlookBridge:
                 response_map = {
                     "accept": 3,  # olResponseAccepted
                     "decline": 4,  # olResponseDeclined
-                    "tentative": 2  # olResponseTentative
+                    "tentative": 2,  # olResponseTentative
                 }
                 if response.lower() in response_map:
                     item.Response(response_map[response.lower()])
@@ -694,16 +779,24 @@ class OutlookBridge:
             try:
                 task = {
                     "entry_id": item.EntryID,
-                    "subject": item.Subject if hasattr(item, 'Subject') else "(No Subject)",
-                    "body": item.Body if hasattr(item, 'Body') else "",
-                    "due_date": item.DueDate.strftime("%Y-%m-%d") if hasattr(item, 'DueDate') and item.DueDate else None,
-                    "status": item.Status if hasattr(item, 'Status') else None,
-                    "priority": item.Importance if hasattr(item, 'Importance') else None,
-                    "complete": item.Complete if hasattr(item, 'Complete') else False,
-                    "percent_complete": item.PercentComplete if hasattr(item, 'PercentComplete') else 0
+                    "subject": item.Subject
+                    if hasattr(item, "Subject")
+                    else "(No Subject)",
+                    "body": item.Body if hasattr(item, "Body") else "",
+                    "due_date": item.DueDate.strftime("%Y-%m-%d")
+                    if hasattr(item, "DueDate") and item.DueDate
+                    else None,
+                    "status": item.Status if hasattr(item, "Status") else None,
+                    "priority": item.Importance
+                    if hasattr(item, "Importance")
+                    else None,
+                    "complete": item.Complete if hasattr(item, "Complete") else False,
+                    "percent_complete": item.PercentComplete
+                    if hasattr(item, "PercentComplete")
+                    else 0,
                 }
                 tasks.append(task)
-            except Exception as e:
+            except Exception:
                 continue
 
         return tasks
@@ -749,20 +842,36 @@ class OutlookBridge:
             try:
                 return {
                     "entry_id": item.EntryID,
-                    "subject": item.Subject if hasattr(item, 'Subject') else "(No Subject)",
-                    "body": item.Body if hasattr(item, 'Body') else "",
-                    "due_date": item.DueDate.strftime("%Y-%m-%d") if hasattr(item, 'DueDate') and item.DueDate else None,
-                    "status": item.Status if hasattr(item, 'Status') else None,
-                    "priority": item.Importance if hasattr(item, 'Importance') else None,
-                    "complete": item.Complete if hasattr(item, 'Complete') else False,
-                    "percent_complete": item.PercentComplete if hasattr(item, 'PercentComplete') else 0
+                    "subject": item.Subject
+                    if hasattr(item, "Subject")
+                    else "(No Subject)",
+                    "body": item.Body if hasattr(item, "Body") else "",
+                    "due_date": item.DueDate.strftime("%Y-%m-%d")
+                    if hasattr(item, "DueDate") and item.DueDate
+                    else None,
+                    "status": item.Status if hasattr(item, "Status") else None,
+                    "priority": item.Importance
+                    if hasattr(item, "Importance")
+                    else None,
+                    "complete": item.Complete if hasattr(item, "Complete") else False,
+                    "percent_complete": item.PercentComplete
+                    if hasattr(item, "PercentComplete")
+                    else 0,
                 }
             except Exception:
                 pass
         return None
 
-    def edit_task(self, entry_id, subject=None, body=None, due_date=None, importance=None,
-                 percent_complete=None, complete=None):
+    def edit_task(
+        self,
+        entry_id,
+        subject=None,
+        body=None,
+        due_date=None,
+        importance=None,
+        percent_complete=None,
+        complete=None,
+    ):
         """
         Edit an existing task (O(1) direct access)
 
@@ -891,13 +1000,15 @@ class OutlookBridge:
                         "subject": item.Subject,
                         "sender": self.resolve_smtp_address(item),
                         "sender_name": item.SenderName,
-                        "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S") if item.ReceivedTime else None,
+                        "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                        if item.ReceivedTime
+                        else None,
                         "unread": item.Unread,
-                        "has_attachments": item.Attachments.Count > 0
+                        "has_attachments": item.Attachments.Count > 0,
                     }
                     emails.append(email)
                     count += 1
-                except Exception as e:
+                except Exception:
                     # Skip items that can't be accessed
                     continue
 
@@ -906,7 +1017,9 @@ class OutlookBridge:
             print(f"Error searching emails: {e}", file=sys.stderr)
             return []
 
-    def get_free_busy(self, email_address=None, start_date=None, end_date=None, entry_id=None):
+    def get_free_busy(
+        self, email_address=None, start_date=None, end_date=None, entry_id=None
+    ):
         """
         Get free/busy status for an email address
 
@@ -923,8 +1036,12 @@ class OutlookBridge:
             # Handle legacy entry_id parameter (extract first required attendee)
             if entry_id and not email_address:
                 item = self.get_item_by_id(entry_id)
-                if item and hasattr(item, 'RequiredAttendees') and item.RequiredAttendees:
-                    attendees = item.RequiredAttendees.split(';')
+                if (
+                    item
+                    and hasattr(item, "RequiredAttendees")
+                    and item.RequiredAttendees
+                ):
+                    attendees = item.RequiredAttendees.split(";")
                     if attendees:
                         email_address = attendees[0].strip()
 
@@ -948,13 +1065,15 @@ class OutlookBridge:
             if recipient.Resolve():
                 # FreeBusy returns a string with time slots and status
                 # 0=Free, 1=Tentative, 2=Busy, 3=Out of Office, 4=Working Elsewhere
-                freebusy = recipient.FreeBusy(start_date, 60 * 24)  # 1440 minutes = 1 day
+                freebusy = recipient.FreeBusy(
+                    start_date, 60 * 24
+                )  # 1440 minutes = 1 day
                 return {
                     "email": email_address,
                     "start_date": start_date.strftime("%Y-%m-%d"),
                     "end_date": end_date.strftime("%Y-%m-%d"),
                     "free_busy": freebusy,
-                    "resolved": True
+                    "resolved": True,
                 }
             else:
                 return {
@@ -962,349 +1081,11 @@ class OutlookBridge:
                     "start_date": start_date.strftime("%Y-%m-%d"),
                     "end_date": end_date.strftime("%Y-%m-%d"),
                     "error": "Could not resolve email address",
-                    "resolved": False
+                    "resolved": False,
                 }
         except Exception as e:
             return {
                 "email": email_address if email_address else "unknown",
                 "error": str(e),
-                "resolved": False
+                "resolved": False,
             }
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Outlook COM Bridge")
-    subparsers = parser.add_subparsers(dest="command", help="Command to run")
-
-    # Emails command
-    email_parser = subparsers.add_parser("emails", help="List emails")
-    email_parser.add_argument("--limit", type=int, default=10, help="Max emails to return")
-    email_parser.add_argument("--folder", default="Inbox", help="Folder name (default: Inbox)")
-
-    # Calendar command
-    cal_parser = subparsers.add_parser("calendar", help="List calendar events")
-    cal_parser.add_argument("--days", type=int, default=7, help="Days ahead to look")
-    cal_parser.add_argument("--all", action="store_true", help="Show all events without date filtering")
-
-    # Get email command
-    get_parser = subparsers.add_parser("email", help="Get email details")
-    get_parser.add_argument("--id", required=True, help="Email entry ID")
-
-    # Send email command
-    send_parser = subparsers.add_parser("send", help="Send an email")
-    send_parser.add_argument("--to", required=True, help="Recipient email address")
-    send_parser.add_argument("--subject", required=True, help="Email subject")
-    send_parser.add_argument("--body", required=True, help="Email body")
-    send_parser.add_argument("--cc", help="CC recipients")
-    send_parser.add_argument("--bcc", help="BCC recipients")
-    send_parser.add_argument("--html", help="HTML body (rich text)")
-    send_parser.add_argument("--attach", nargs="+", help="File paths to attach")
-    send_parser.add_argument("--draft", action="store_true", help="Save as draft instead of sending")
-
-    # Download attachments command
-    attach_parser = subparsers.add_parser("attachments", help="Download email attachments")
-    attach_parser.add_argument("--id", required=True, help="Email entry ID")
-    attach_parser.add_argument("--dir", required=True, help="Directory to save attachments")
-
-    # Reply email command
-    reply_parser = subparsers.add_parser("reply", help="Reply to an email")
-    reply_parser.add_argument("--id", required=True, help="Email entry ID")
-    reply_parser.add_argument("--body", required=True, help="Reply body")
-    reply_parser.add_argument("--all", action="store_true", help="Reply all instead of just sender")
-
-    # Forward email command
-    forward_parser = subparsers.add_parser("forward", help="Forward an email")
-    forward_parser.add_argument("--id", required=True, help="Email entry ID")
-    forward_parser.add_argument("--to", required=True, help="Recipient to forward to")
-    forward_parser.add_argument("--body", default="", help="Additional body text")
-
-    # Search emails command
-    search_parser = subparsers.add_parser("search", help="Search emails using Restriction")
-    search_parser.add_argument("--query", required=True, help="SQL filter query (e.g., urn:schemas:httpmail:subject LIKE '%keyword%')")
-    search_parser.add_argument("--limit", type=int, default=100, help="Max results to return")
-
-    # Mark email command
-    mark_parser = subparsers.add_parser("mark", help="Mark email as read/unread")
-    mark_parser.add_argument("--id", required=True, help="Email entry ID")
-    mark_parser.add_argument("--unread", action="store_true", help="Mark as unread (default: read)")
-
-    # Move email command
-    move_parser = subparsers.add_parser("move", help="Move email to folder")
-    move_parser.add_argument("--id", required=True, help="Email entry ID")
-    move_parser.add_argument("--folder", required=True, help="Target folder name")
-
-    # Delete email command
-    del_email_parser = subparsers.add_parser("delete-email", help="Delete an email")
-    del_email_parser.add_argument("--id", required=True, help="Email entry ID")
-
-    # Create appointment command
-    create_appt_parser = subparsers.add_parser("create-appt", help="Create calendar appointment")
-    create_appt_parser.add_argument("--subject", required=True, help="Appointment subject")
-    create_appt_parser.add_argument("--start", required=True, help="Start time (YYYY-MM-DD HH:MM:SS)")
-    create_appt_parser.add_argument("--end", required=True, help="End time (YYYY-MM-DD HH:MM:SS)")
-    create_appt_parser.add_argument("--location", default="", help="Location")
-    create_appt_parser.add_argument("--body", default="", help="Appointment description")
-    create_appt_parser.add_argument("--all-day", action="store_true", help="All-day event")
-    create_appt_parser.add_argument("--required", help="Required attendees (semicolon-separated)")
-    create_appt_parser.add_argument("--optional", help="Optional attendees (semicolon-separated)")
-
-    # Get appointment command
-    get_appt_parser = subparsers.add_parser("appointment", help="Get appointment details")
-    get_appt_parser.add_argument("--id", required=True, help="Appointment entry ID")
-
-    # Delete appointment command
-    del_appt_parser = subparsers.add_parser("delete-appt", help="Delete an appointment")
-    del_appt_parser.add_argument("--id", required=True, help="Appointment entry ID")
-
-    # Respond to meeting command
-    respond_parser = subparsers.add_parser("respond", help="Respond to meeting invitation")
-    respond_parser.add_argument("--id", required=True, help="Appointment entry ID")
-    respond_parser.add_argument("--response", required=True, choices=["accept", "decline", "tentative"],
-                              help="Meeting response")
-
-    # Free/busy command
-    freebusy_parser = subparsers.add_parser("freebusy", help="Get free/busy status")
-    freebusy_parser.add_argument("--email", help="Email address to check (defaults to current user)")
-    freebusy_parser.add_argument("--start", help="Start date (YYYY-MM-DD, defaults to today)")
-    freebusy_parser.add_argument("--end", help="End date (YYYY-MM-DD, defaults to tomorrow)")
-    freebusy_parser.add_argument("--id", help="DEPRECATED: Appointment entry ID (use --email instead)")
-
-    # Edit appointment command
-    edit_appt_parser = subparsers.add_parser("edit-appt", help="Edit an appointment")
-    edit_appt_parser.add_argument("--id", required=True, help="Appointment entry ID")
-    edit_appt_parser.add_argument("--required", help="Required attendees (comma-separated)")
-    edit_appt_parser.add_argument("--optional", help="Optional attendees (comma-separated)")
-    edit_appt_parser.add_argument("--subject", help="New subject")
-    edit_appt_parser.add_argument("--start", help="New start time (YYYY-MM-DD HH:MM:SS)")
-    edit_appt_parser.add_argument("--end", help="New end time (YYYY-MM-DD HH:MM:SS)")
-    edit_appt_parser.add_argument("--location", help="New location")
-    edit_appt_parser.add_argument("--body", help="New body/description")
-
-    # Tasks command
-    tasks_parser = subparsers.add_parser("tasks", help="List all tasks")
-
-    # Get task command
-    get_task_parser = subparsers.add_parser("task", help="Get task details")
-    get_task_parser.add_argument("--id", required=True, help="Task entry ID")
-
-    # Create task command
-    create_task_parser = subparsers.add_parser("create-task", help="Create a new task")
-    create_task_parser.add_argument("--subject", required=True, help="Task subject")
-    create_task_parser.add_argument("--body", default="", help="Task description")
-    create_task_parser.add_argument("--due", help="Due date (YYYY-MM-DD)")
-    create_task_parser.add_argument("--priority", type=int, choices=[0, 1, 2], default=1,
-                                   help="Priority: 0=Low, 1=Normal, 2=High")
-
-    # Edit task command
-    edit_task_parser = subparsers.add_parser("edit-task", help="Edit a task")
-    edit_task_parser.add_argument("--id", required=True, help="Task entry ID")
-    edit_task_parser.add_argument("--subject", help="New subject")
-    edit_task_parser.add_argument("--body", help="New description")
-    edit_task_parser.add_argument("--due", help="New due date (YYYY-MM-DD)")
-    edit_task_parser.add_argument("--priority", type=int, choices=[0, 1, 2], help="New priority")
-    edit_task_parser.add_argument("--percent", type=int, choices=range(0, 101), help="Percent complete (0-100)")
-    edit_task_parser.add_argument("--complete", type=bool, help="Mark complete/incomplete (true/false)")
-
-    # Complete task command
-    complete_task_parser = subparsers.add_parser("complete-task", help="Mark task as complete")
-    complete_task_parser.add_argument("--id", required=True, help="Task entry ID")
-
-    # Delete task command
-    del_task_parser = subparsers.add_parser("delete-task", help="Delete a task")
-    del_task_parser.add_argument("--id", required=True, help="Task entry ID")
-
-    args = parser.parse_args()
-
-    if not args.command:
-        parser.print_help()
-        sys.exit(1)
-
-    bridge = OutlookBridge()
-
-    if args.command == "emails":
-        emails = bridge.list_emails(limit=args.limit, folder=args.folder)
-        print(json.dumps(emails, indent=2))
-
-    elif args.command == "calendar":
-        events = bridge.list_calendar_events(days=args.days, all_events=args.all)
-        print(json.dumps(events, indent=2))
-
-    elif args.command == "email":
-        email = bridge.get_email_body(entry_id=args.id)
-        if email:
-            print(json.dumps(email, indent=2))
-        else:
-            print("Email not found", file=sys.stderr)
-            sys.exit(1)
-
-    elif args.command == "send":
-        result = bridge.send_email(args.to, args.subject, args.body, args.cc, args.bcc,
-                                     html_body=args.html, file_paths=args.attach, save_draft=args.draft)
-        if result:
-            if args.draft:
-                print(json.dumps({"status": "success", "entry_id": result, "message": "Draft saved"}))
-            else:
-                print(json.dumps({"status": "success", "message": "Email sent"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to send email"}))
-            sys.exit(1)
-
-    elif args.command == "attachments":
-        downloaded = bridge.download_attachments(args.id, args.dir)
-        if downloaded:
-            print(json.dumps({"status": "success", "attachments": downloaded}))
-        else:
-            print(json.dumps({"status": "error", "message": "No attachments found or failed to download"}))
-            sys.exit(1)
-
-    elif args.command == "reply":
-        result = bridge.reply_email(args.id, args.body, reply_all=args.all)
-        if result:
-            print(json.dumps({"status": "success", "message": "Reply sent"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to send reply"}))
-            sys.exit(1)
-
-    elif args.command == "forward":
-        result = bridge.forward_email(args.id, args.to, args.body)
-        if result:
-            print(json.dumps({"status": "success", "message": "Email forwarded"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to forward email"}))
-            sys.exit(1)
-
-    elif args.command == "search":
-        emails = bridge.search_emails(args.query, limit=args.limit)
-        print(json.dumps(emails, indent=2))
-
-    elif args.command == "mark":
-        result = bridge.mark_email_read(args.id, unread=args.unread)
-        if result:
-            status = "unread" if args.unread else "read"
-            print(json.dumps({"status": "success", "message": f"Email marked as {status}"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to mark email"}))
-            sys.exit(1)
-
-    elif args.command == "move":
-        result = bridge.move_email(args.id, args.folder)
-        if result:
-            print(json.dumps({"status": "success", "message": f"Email moved to {args.folder}"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to move email"}))
-            sys.exit(1)
-
-    elif args.command == "delete-email":
-        result = bridge.delete_email(args.id)
-        if result:
-            print(json.dumps({"status": "success", "message": "Email deleted"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to delete email"}))
-            sys.exit(1)
-
-    elif args.command == "create-appt":
-        entry_id = bridge.create_appointment(args.subject, args.start, args.end, args.location, args.body,
-                                              args.all_day, args.required, args.optional)
-        if entry_id:
-            print(json.dumps({"status": "success", "entry_id": entry_id, "message": "Appointment created"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to create appointment"}))
-            sys.exit(1)
-
-    elif args.command == "appointment":
-        appointment = bridge.get_appointment(args.id)
-        if appointment:
-            print(json.dumps(appointment, indent=2))
-        else:
-            print("Appointment not found", file=sys.stderr)
-            sys.exit(1)
-
-    elif args.command == "delete-appt":
-        result = bridge.delete_appointment(args.id)
-        if result:
-            print(json.dumps({"status": "success", "message": "Appointment deleted"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to delete appointment"}))
-            sys.exit(1)
-
-    elif args.command == "edit-appt":
-        result = bridge.edit_appointment(
-            args.id,
-            required_attendees=args.required,
-            optional_attendees=args.optional,
-            subject=args.subject,
-            start=args.start,
-            end=args.end,
-            location=args.location,
-            body=args.body
-        )
-        if result:
-            print(json.dumps({"status": "success", "message": "Appointment updated"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to edit appointment"}))
-            sys.exit(1)
-
-    elif args.command == "respond":
-        result = bridge.respond_to_meeting(args.id, args.response)
-        if result:
-            print(json.dumps({"status": "success", "message": f"Meeting {args.response}ed"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to respond to meeting"}))
-            sys.exit(1)
-
-    elif args.command == "freebusy":
-        freebusy = bridge.get_free_busy(
-            email_address=getattr(args, 'email', None),
-            start_date=getattr(args, 'start', None),
-            end_date=getattr(args, 'end', None),
-            entry_id=getattr(args, 'id', None)
-        )
-        print(json.dumps(freebusy, indent=2))
-
-    elif args.command == "tasks":
-        tasks = bridge.list_tasks()
-        print(json.dumps(tasks, indent=2))
-
-    elif args.command == "task":
-        task = bridge.get_task(args.id)
-        if task:
-            print(json.dumps(task, indent=2))
-        else:
-            print("Task not found", file=sys.stderr)
-            sys.exit(1)
-
-    elif args.command == "create-task":
-        entry_id = bridge.create_task(args.subject, args.body, args.due, args.priority)
-        if entry_id:
-            print(json.dumps({"status": "success", "entry_id": entry_id, "message": "Task created"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to create task"}))
-            sys.exit(1)
-
-    elif args.command == "edit-task":
-        result = bridge.edit_task(args.id, args.subject, args.body, args.due, args.priority, args.percent, args.complete)
-        if result:
-            print(json.dumps({"status": "success", "message": "Task updated"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to edit task"}))
-            sys.exit(1)
-
-    elif args.command == "complete-task":
-        result = bridge.complete_task(args.id)
-        if result:
-            print(json.dumps({"status": "success", "message": "Task marked as complete"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to complete task"}))
-            sys.exit(1)
-
-    elif args.command == "delete-task":
-        result = bridge.delete_task(args.id)
-        if result:
-            print(json.dumps({"status": "success", "message": "Task deleted"}))
-        else:
-            print(json.dumps({"status": "error", "message": "Failed to delete task"}))
-            sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

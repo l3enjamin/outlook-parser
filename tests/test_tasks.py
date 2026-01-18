@@ -6,9 +6,11 @@ Tests for listing, creating, and managing Outlook tasks.
 
 # Modified to test pre-commit hook
 
-import pytest
 from datetime import datetime, timedelta
-from .conftest import assert_valid_entry_id, TEST_PREFIX
+
+import pytest
+
+from .conftest import TEST_PREFIX, assert_valid_entry_id
 
 
 @pytest.mark.integration
@@ -30,10 +32,7 @@ class TestTasks:
         """Test creating a basic task"""
         subject = f"{TEST_PREFIX}Task Test {test_timestamp}"
 
-        entry_id = bridge.create_task(
-            subject=subject,
-            body="Test task body"
-        )
+        entry_id = bridge.create_task(subject=subject, body="Test task body")
 
         assert_valid_entry_id(entry_id)
 
@@ -43,7 +42,7 @@ class TestTasks:
         assert task["subject"] == subject
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_create_task_with_due_date(self, bridge, test_timestamp, cleanup_helpers):
         """Test creating a task with a due date"""
@@ -51,9 +50,7 @@ class TestTasks:
         due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
 
         entry_id = bridge.create_task(
-            subject=subject,
-            body="Task with due date",
-            due_date=due_date
+            subject=subject, body="Task with due date", due_date=due_date
         )
 
         assert_valid_entry_id(entry_id)
@@ -64,15 +61,11 @@ class TestTasks:
         assert task["due_date"] == due_date
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_create_task_with_priority(self, bridge, test_timestamp, cleanup_helpers):
         """Test creating tasks with different priority levels"""
-        test_priorities = [
-            (0, "Low"),
-            (1, "Normal"),
-            (2, "High")
-        ]
+        test_priorities = [(0, "Low"), (1, "Normal"), (2, "High")]
 
         for priority, priority_name in test_priorities:
             subject = f"{TEST_PREFIX}Priority {priority_name} Test {test_timestamp}"
@@ -80,7 +73,7 @@ class TestTasks:
             entry_id = bridge.create_task(
                 subject=subject,
                 due_date=(datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
-                importance=priority
+                importance=priority,
             )
 
             assert_valid_entry_id(entry_id)
@@ -91,7 +84,7 @@ class TestTasks:
             assert task["priority"] == priority
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_get_task(self, bridge, sample_task_data):
         """Test retrieving task by EntryID"""
@@ -104,8 +97,14 @@ class TestTasks:
 
         # Verify all expected fields are present
         expected_fields = [
-            "entry_id", "subject", "body", "due_date",
-            "status", "priority", "complete", "percent_complete"
+            "entry_id",
+            "subject",
+            "body",
+            "due_date",
+            "status",
+            "priority",
+            "complete",
+            "percent_complete",
         ]
         for field in expected_fields:
             assert field in task
@@ -114,10 +113,7 @@ class TestTasks:
         """Test editing a task's subject"""
         # Create task
         original_subject = f"{TEST_PREFIX}Edit Subject Test {test_timestamp}"
-        entry_id = bridge.create_task(
-            subject=original_subject,
-            body="Test body"
-        )
+        entry_id = bridge.create_task(subject=original_subject, body="Test body")
 
         # Edit subject
         new_subject = f"{TEST_PREFIX}Updated Subject {test_timestamp}"
@@ -130,16 +126,13 @@ class TestTasks:
         assert task["subject"] == new_subject
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_edit_task_body(self, bridge, test_timestamp, cleanup_helpers):
         """Test editing a task's body"""
         # Create task
         subject = f"{TEST_PREFIX}Edit Body Test {test_timestamp}"
-        entry_id = bridge.create_task(
-            subject=subject,
-            body="Original body"
-        )
+        entry_id = bridge.create_task(subject=subject, body="Original body")
 
         # Edit body
         new_body = "Updated body content"
@@ -152,17 +145,14 @@ class TestTasks:
         assert task["body"] == new_body
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_edit_task_due_date(self, bridge, test_timestamp, cleanup_helpers):
         """Test editing a task's due date"""
         # Create task
         subject = f"{TEST_PREFIX}Edit Due Date Test {test_timestamp}"
         original_due = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d")
-        entry_id = bridge.create_task(
-            subject=subject,
-            due_date=original_due
-        )
+        entry_id = bridge.create_task(subject=subject, due_date=original_due)
 
         # Edit due date
         new_due = (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
@@ -175,7 +165,7 @@ class TestTasks:
         assert task["due_date"] == new_due
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_edit_task_priority(self, bridge, test_timestamp, cleanup_helpers):
         """Test editing a task's priority"""
@@ -183,7 +173,7 @@ class TestTasks:
         subject = f"{TEST_PREFIX}Edit Priority Test {test_timestamp}"
         entry_id = bridge.create_task(
             subject=subject,
-            importance=1  # Normal
+            importance=1,  # Normal
         )
 
         # Edit to high priority
@@ -196,7 +186,7 @@ class TestTasks:
         assert task["priority"] == 2
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_edit_task_percent_complete(self, bridge, test_timestamp, cleanup_helpers):
         """Test editing a task's percent complete"""
@@ -222,7 +212,7 @@ class TestTasks:
         # Note: complete and status may auto-update
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_complete_task(self, bridge, test_timestamp, cleanup_helpers):
         """Test marking a task as complete"""
@@ -232,7 +222,7 @@ class TestTasks:
 
         # Verify not complete initially
         task = bridge.get_task(entry_id)
-        original_complete = task["complete"]
+        task["complete"]
 
         # Mark as complete
         result = bridge.complete_task(entry_id)
@@ -245,7 +235,7 @@ class TestTasks:
         assert task["percent_complete"] == 100
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
     def test_delete_task(self, bridge, test_timestamp):
         """Test deleting a task"""
@@ -289,4 +279,4 @@ class TestTasks:
         assert task["status"] == 2  # Complete
 
         # Cleanup
-        cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)

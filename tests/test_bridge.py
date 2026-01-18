@@ -7,7 +7,6 @@ These tests verify that the Outlook COM bridge can connect and perform basic ope
 # Modified to test pre-commit hook
 
 import pytest
-from .conftest import assert_valid_entry_id
 
 
 @pytest.mark.integration
@@ -47,7 +46,7 @@ class TestOutlookBridge:
         user = bridge.namespace.CurrentUser
         assert user is not None
         # Should have at least a name or address
-        assert hasattr(user, 'Name') or hasattr(user, 'Address')
+        assert hasattr(user, "Name") or hasattr(user, "Address")
 
     def test_get_item_by_id_with_invalid_id(self, bridge):
         """Test that get_item_by_id handles invalid IDs gracefully"""

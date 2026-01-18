@@ -6,9 +6,11 @@ Tests for listing, creating, and managing calendar appointments.
 
 # Modified to test pre-commit hook
 
-import pytest
 from datetime import datetime, timedelta
-from .conftest import assert_valid_entry_id, assert_calendar_structure, TEST_PREFIX
+
+import pytest
+
+from .conftest import TEST_PREFIX, assert_calendar_structure, assert_valid_entry_id
 
 
 @pytest.mark.integration
@@ -56,7 +58,7 @@ class TestCalendar:
         entry_id = bridge.create_appointment(
             subject=subject,
             start=start.strftime("%Y-%m-%d %H:%M:%S"),
-            end=end.strftime("%Y-%m-%d %H:%M:%S")
+            end=end.strftime("%Y-%m-%d %H:%M:%S"),
         )
 
         assert_valid_entry_id(entry_id)
@@ -67,9 +69,11 @@ class TestCalendar:
         assert appt["subject"] == subject
 
         # Cleanup
-        cleanup_helpers['delete_calendar_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_calendar_by_prefix"](TEST_PREFIX)
 
-    def test_create_appointment_with_location(self, bridge, test_timestamp, cleanup_helpers):
+    def test_create_appointment_with_location(
+        self, bridge, test_timestamp, cleanup_helpers
+    ):
         """Test creating an appointment with location"""
         subject = f"{TEST_PREFIX}Location Test {test_timestamp}"
         location = "Conference Room B"
@@ -81,7 +85,7 @@ class TestCalendar:
             subject=subject,
             start=start.strftime("%Y-%m-%d %H:%M:%S"),
             end=end.strftime("%Y-%m-%d %H:%M:%S"),
-            location=location
+            location=location,
         )
 
         assert_valid_entry_id(entry_id)
@@ -92,9 +96,11 @@ class TestCalendar:
         assert appt["location"] == location
 
         # Cleanup
-        cleanup_helpers['delete_calendar_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_calendar_by_prefix"](TEST_PREFIX)
 
-    def test_create_appointment_with_body(self, bridge, test_timestamp, cleanup_helpers):
+    def test_create_appointment_with_body(
+        self, bridge, test_timestamp, cleanup_helpers
+    ):
         """Test creating an appointment with body/description"""
         subject = f"{TEST_PREFIX}Body Test {test_timestamp}"
         body = f"Agenda:\n1. Review project status\n2. Discuss timeline\n3. Action items\n\nTest ID: {test_timestamp}"
@@ -106,7 +112,7 @@ class TestCalendar:
             subject=subject,
             start=start.strftime("%Y-%m-%d %H:%M:%S"),
             end=end.strftime("%Y-%m-%d %H:%M:%S"),
-            body=body
+            body=body,
         )
 
         assert_valid_entry_id(entry_id)
@@ -117,7 +123,7 @@ class TestCalendar:
         assert test_timestamp in appt["body"]
 
         # Cleanup
-        cleanup_helpers['delete_calendar_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_calendar_by_prefix"](TEST_PREFIX)
 
     def test_create_all_day_event(self, bridge, test_timestamp, cleanup_helpers):
         """Test creating an all-day event"""
@@ -132,7 +138,7 @@ class TestCalendar:
             subject=subject,
             start=start.strftime("%Y-%m-%d %H:%M:%S"),
             end=end.strftime("%Y-%m-%d %H:%M:%S"),
-            all_day=True
+            all_day=True,
         )
 
         assert_valid_entry_id(entry_id)
@@ -143,9 +149,11 @@ class TestCalendar:
         assert appt["all_day"] is True
 
         # Cleanup
-        cleanup_helpers['delete_calendar_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_calendar_by_prefix"](TEST_PREFIX)
 
-    def test_create_appointment_with_attendees(self, bridge, test_timestamp, cleanup_helpers):
+    def test_create_appointment_with_attendees(
+        self, bridge, test_timestamp, cleanup_helpers
+    ):
         """Test creating an appointment with attendees"""
         subject = f"{TEST_PREFIX}Attendees Test {test_timestamp}"
 
@@ -157,7 +165,7 @@ class TestCalendar:
             start=start.strftime("%Y-%m-%d %H:%M:%S"),
             end=end.strftime("%Y-%m-%d %H:%M:%S"),
             required_attendees="required1@example.com; required2@example.com",
-            optional_attendees="optional1@example.com"
+            optional_attendees="optional1@example.com",
         )
 
         assert_valid_entry_id(entry_id)
@@ -169,7 +177,7 @@ class TestCalendar:
         assert "optional1@example.com" in appt["optional_attendees"]
 
         # Cleanup
-        cleanup_helpers['delete_calendar_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_calendar_by_prefix"](TEST_PREFIX)
 
     def test_get_appointment(self, bridge, sample_calendar_data):
         """Test retrieving appointment by EntryID"""
@@ -182,9 +190,18 @@ class TestCalendar:
 
         # Verify all expected fields are present
         expected_fields = [
-            "entry_id", "subject", "start", "end", "location",
-            "body", "all_day", "required_attendees", "optional_attendees",
-            "response_status", "meeting_status", "response_requested"
+            "entry_id",
+            "subject",
+            "start",
+            "end",
+            "location",
+            "body",
+            "all_day",
+            "required_attendees",
+            "optional_attendees",
+            "response_status",
+            "meeting_status",
+            "response_requested",
         ]
         for field in expected_fields:
             assert field in appt
@@ -200,15 +217,12 @@ class TestCalendar:
             subject=subject,
             start=start.strftime("%Y-%m-%d %H:%M:%S"),
             end=end.strftime("%Y-%m-%d %H:%M:%S"),
-            location="Original Location"
+            location="Original Location",
         )
 
         # Edit it
         new_location = "Updated Location"
-        result = bridge.edit_appointment(
-            entry_id,
-            location=new_location
-        )
+        result = bridge.edit_appointment(entry_id, location=new_location)
 
         assert result is True
 
@@ -217,7 +231,7 @@ class TestCalendar:
         assert appt["location"] == new_location
 
         # Cleanup
-        cleanup_helpers['delete_calendar_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_calendar_by_prefix"](TEST_PREFIX)
 
     def test_delete_appointment(self, bridge, test_timestamp):
         """Test deleting an appointment"""
@@ -229,7 +243,7 @@ class TestCalendar:
         entry_id = bridge.create_appointment(
             subject=subject,
             start=start.strftime("%Y-%m-%d %H:%M:%S"),
-            end=end.strftime("%Y-%m-%d %H:%M:%S")
+            end=end.strftime("%Y-%m-%d %H:%M:%S"),
         )
 
         # Verify it exists
@@ -260,10 +274,7 @@ class TestCalendar:
         start_date = "2025-01-01"
         end_date = "2025-01-02"
 
-        result = bridge.get_free_busy(
-            start_date=start_date,
-            end_date=end_date
-        )
+        result = bridge.get_free_busy(start_date=start_date, end_date=end_date)
 
         assert result is not None
         assert isinstance(result, dict)

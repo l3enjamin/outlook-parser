@@ -7,7 +7,8 @@ Tests for listing, retrieving, creating, and managing emails.
 # Modified to test pre-commit hook
 
 import pytest
-from .conftest import assert_valid_entry_id, assert_email_structure, TEST_PREFIX
+
+from .conftest import TEST_PREFIX, assert_email_structure, assert_valid_entry_id
 
 
 @pytest.mark.integration
@@ -44,10 +45,7 @@ class TestEmails:
         body = f"Test draft email body\nTimestamp: {test_timestamp}"
 
         entry_id = bridge.send_email(
-            to="test@example.com",
-            subject=subject,
-            body=body,
-            save_draft=True
+            to="test@example.com", subject=subject, body=body, save_draft=True
         )
 
         assert_valid_entry_id(entry_id)
@@ -58,7 +56,7 @@ class TestEmails:
         assert draft.Subject == subject
 
         # Cleanup
-        cleanup_helpers['delete_drafts_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_drafts_by_prefix"](TEST_PREFIX)
 
     def test_create_draft_with_cc_bcc(self, bridge, test_timestamp, cleanup_helpers):
         """Test creating a draft with CC and BCC"""
@@ -70,7 +68,7 @@ class TestEmails:
             body="Test body",
             cc="cc@example.com",
             bcc="bcc@example.com",
-            save_draft=True
+            save_draft=True,
         )
 
         assert_valid_entry_id(entry_id)
@@ -81,7 +79,7 @@ class TestEmails:
         # Note: Outlook may format recipients differently
 
         # Cleanup
-        cleanup_helpers['delete_drafts_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_drafts_by_prefix"](TEST_PREFIX)
 
     def test_create_draft_with_html_body(self, bridge, test_timestamp, cleanup_helpers):
         """Test creating a draft with HTML body"""
@@ -93,7 +91,7 @@ class TestEmails:
             subject=subject,
             body="Plain text fallback",
             html_body=html_body,
-            save_draft=True
+            save_draft=True,
         )
 
         assert_valid_entry_id(entry_id)
@@ -104,7 +102,7 @@ class TestEmails:
         assert draft.HTMLBody is not None
 
         # Cleanup
-        cleanup_helpers['delete_drafts_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_drafts_by_prefix"](TEST_PREFIX)
 
     def test_get_email_body(self, bridge, sample_email_data):
         """Test retrieving full email body by EntryID"""
@@ -146,10 +144,7 @@ class TestEmails:
         # Create a draft
         subject = f"{TEST_PREFIX}Delete Test {test_timestamp}"
         entry_id = bridge.send_email(
-            to="test@example.com",
-            subject=subject,
-            body="Test body",
-            save_draft=True
+            to="test@example.com", subject=subject, body="Test body", save_draft=True
         )
 
         assert_valid_entry_id(entry_id)
@@ -177,7 +172,7 @@ class TestEmails:
             to="test@example.com",
             subject=subject,
             body="Search test body",
-            save_draft=True
+            save_draft=True,
         )
 
         # Search for it using Jet SQL syntax
@@ -199,26 +194,23 @@ class TestEmails:
         assert found, f"Test email with '{unique_term}' not found in search results"
 
         # Cleanup
-        cleanup_helpers['delete_drafts_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_drafts_by_prefix"](TEST_PREFIX)
 
     def test_move_email_to_folder(self, bridge, test_timestamp, cleanup_helpers):
         """Test moving an email to a different folder"""
         # Create a draft
         subject = f"{TEST_PREFIX}Move Test {test_timestamp}"
         entry_id = bridge.send_email(
-            to="test@example.com",
-            subject=subject,
-            body="Test body",
-            save_draft=True
+            to="test@example.com", subject=subject, body="Test body", save_draft=True
         )
 
         # Try to move to Inbox (most likely to exist)
-        result = bridge.move_email(entry_id, "Inbox")
+        bridge.move_email(entry_id, "Inbox")
         # Note: This may fail if item is already in Inbox
         # We're mainly testing the API doesn't crash
 
         # Cleanup
-        cleanup_helpers['delete_drafts_by_prefix'](TEST_PREFIX)
+        cleanup_helpers["delete_drafts_by_prefix"](TEST_PREFIX)
 
     def test_reply_to_email(self, bridge, sample_email_data):
         """Test replying to an email"""

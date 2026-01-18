@@ -16,8 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
-from mailtool_outlook_bridge import OutlookBridge
 
+from mailtool.bridge import OutlookBridge
 
 # =============================================================================
 # Test Configuration
@@ -36,6 +36,7 @@ WARMUP_DELAY = 0.5
 # Session-scoped Fixtures (created once per test run)
 # =============================================================================
 
+
 @pytest.fixture(scope="session")
 def bridge():
     """
@@ -43,9 +44,9 @@ def bridge():
     Created once and reused across all tests for speed.
     Includes warmup period to ensure Outlook is responsive.
     """
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("INITIALIZING OUTLOOK BRIDGE (Session-scoped)")
-    print("="*70)
+    print("=" * 70)
 
     # Create bridge instance
     bridge_instance = OutlookBridge()
@@ -71,20 +72,21 @@ def bridge():
                 print(f"✗ Outlook warmup failed after {WARMUP_ATTEMPTS} attempts")
                 raise
 
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
     yield bridge_instance
 
     # No explicit cleanup needed - bridge is just a COM reference
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TEARDOWN: Bridge session complete")
-    print("="*70)
+    print("=" * 70)
 
 
 # =============================================================================
 # Function-scoped Fixtures (created for each test)
 # =============================================================================
 
-@pytest.fixture(scope="function")
+
+@pytest.fixture
 def test_timestamp():
     """
     Unique timestamp for each test.
@@ -93,7 +95,7 @@ def test_timestamp():
     return f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def cleanup_helpers(bridge):
     """
     Provides helper functions for test cleanup.
@@ -114,7 +116,11 @@ def cleanup_helpers(bridge):
         deleted_count = 0
         for item in items:
             try:
-                if hasattr(item, 'Subject') and item.Subject and item.Subject.startswith(prefix):
+                if (
+                    hasattr(item, "Subject")
+                    and item.Subject
+                    and item.Subject.startswith(prefix)
+                ):
                     item.Delete()
                     deleted_count += 1
             except Exception:
@@ -132,7 +138,11 @@ def cleanup_helpers(bridge):
         deleted_count = 0
         for item in items:
             try:
-                if hasattr(item, 'Subject') and item.Subject and item.Subject.startswith(prefix):
+                if (
+                    hasattr(item, "Subject")
+                    and item.Subject
+                    and item.Subject.startswith(prefix)
+                ):
                     item.Delete()
                     deleted_count += 1
             except Exception:
@@ -150,7 +160,11 @@ def cleanup_helpers(bridge):
         deleted_count = 0
         for item in items:
             try:
-                if hasattr(item, 'Subject') and item.Subject and item.Subject.startswith(prefix):
+                if (
+                    hasattr(item, "Subject")
+                    and item.Subject
+                    and item.Subject.startswith(prefix)
+                ):
                     item.Delete()
                     deleted_count += 1
             except Exception:
@@ -160,17 +174,17 @@ def cleanup_helpers(bridge):
             print(f"  Cleanup: Deleted {deleted_count} task(s)")
         return deleted_count
 
-    helpers['delete_drafts_by_prefix'] = delete_drafts_by_prefix
-    helpers['delete_calendar_by_prefix'] = delete_calendar_by_prefix
-    helpers['delete_tasks_by_prefix'] = delete_tasks_by_prefix
+    helpers["delete_drafts_by_prefix"] = delete_drafts_by_prefix
+    helpers["delete_calendar_by_prefix"] = delete_calendar_by_prefix
+    helpers["delete_tasks_by_prefix"] = delete_tasks_by_prefix
 
-    yield helpers
+    return helpers
 
     # Automatic cleanup of test artifacts is handled by individual tests
     # This fixture just provides the helpers
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def sample_email_data(bridge, cleanup_helpers):
     """
     Creates a sample draft email for testing.
@@ -181,24 +195,21 @@ def sample_email_data(bridge, cleanup_helpers):
     body = f"This is a test email created at {time.ctime()}.\n\nTest ID: {test_unique}"
 
     entry_id = bridge.send_email(
-        to="test@example.com",
-        subject=subject,
-        body=body,
-        save_draft=True
+        to="test@example.com", subject=subject, body=body, save_draft=True
     )
 
     yield {
         "entry_id": entry_id,
         "subject": subject,
         "body": body,
-        "test_id": test_unique
+        "test_id": test_unique,
     }
 
     # Cleanup
-    cleanup_helpers['delete_drafts_by_prefix'](TEST_PREFIX)
+    cleanup_helpers["delete_drafts_by_prefix"](TEST_PREFIX)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def sample_calendar_data(bridge, cleanup_helpers):
     """
     Creates a sample calendar event for testing.
@@ -217,21 +228,16 @@ def sample_calendar_data(bridge, cleanup_helpers):
         start=start.strftime("%Y-%m-%d %H:%M:%S"),
         end=end.strftime("%Y-%m-%d %H:%M:%S"),
         location="Test Location",
-        body="Test event body"
+        body="Test event body",
     )
 
-    yield {
-        "entry_id": entry_id,
-        "subject": subject,
-        "start": start,
-        "end": end
-    }
+    yield {"entry_id": entry_id, "subject": subject, "start": start, "end": end}
 
     # Cleanup
-    cleanup_helpers['delete_calendar_by_prefix'](TEST_PREFIX)
+    cleanup_helpers["delete_calendar_by_prefix"](TEST_PREFIX)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def sample_task_data(bridge, cleanup_helpers):
     """
     Creates a sample task for testing.
@@ -245,24 +251,19 @@ def sample_task_data(bridge, cleanup_helpers):
     due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
 
     entry_id = bridge.create_task(
-        subject=subject,
-        body="Test task body",
-        due_date=due_date
+        subject=subject, body="Test task body", due_date=due_date
     )
 
-    yield {
-        "entry_id": entry_id,
-        "subject": subject,
-        "due_date": due_date
-    }
+    yield {"entry_id": entry_id, "subject": subject, "due_date": due_date}
 
     # Cleanup
-    cleanup_helpers['delete_tasks_by_prefix'](TEST_PREFIX)
+    cleanup_helpers["delete_tasks_by_prefix"](TEST_PREFIX)
 
 
 # =============================================================================
 # Test Helper Functions
 # =============================================================================
+
 
 def assert_valid_entry_id(entry_id):
     """Helper to verify an EntryID looks valid"""

@@ -1,14 +1,167 @@
+[build-system]
+requires = ["uv_build>=0.9.23,<0.10.0"]
+build-backend = "uv_build"
+
 [project]
 name = "mailtool"
-version = "0.1.0"
-description = "Outlook automation bridge for WSL2"
+version = "2.1.0"
+description = "Outlook automation bridge for WSL2 via COM"
+readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
-
-[project.optional-dependencies]
-windows = [
-    "pywin32>=306",
+license = { text = "MIT" }
+authors = [
+    { name = "Sam", email = "s.mok@utwente.nl" }
+]
+keywords = ["outlook", "com", "automation", "email", "calendar", "wsl2"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Office/Business :: Office Suites",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "pywin32>=306; sys_platform == 'win32'",
 ]
 
-[tool.uv]
-dev-dependencies = []
+[project.scripts]
+mailtool = "mailtool.cli:main"
+
+# Development dependencies (new format replacing deprecated [tool.uv.dev-dependencies])
+[dependency-groups]
+dev = [
+    # Ruff: Extremely fast Python linter and code formatter
+    # Replaces Flake8, Black, isort, pydocstyle, pyupgrade, autoflake
+    "ruff>=0.9.0",
+
+    # Note: Ty (Astral's type checker) is still in alpha (0.0.1a15 as of Jan 2025)
+    # We'll add it once it reaches beta/stable. For now, Ruff provides sufficient linting.
+]
+
+# ============================================================================
+# RUFF CONFIGURATION
+# ============================================================================
+# Ruff is a fast Python linter and formatter written in Rust
+# Documentation: https://docs.astral.sh/ruff/
+
+[tool.ruff]
+# Target Python 3.13+ (matches project's requires-python)
+target-version = "py313"
+
+# Line length to 88 characters (Black default)
+line-length = 88
+
+# Directories to exclude from linting/formatting
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+[tool.ruff.lint]
+# Enable comprehensive rule set for modern Python project
+select = [
+    "E",     # pycodestyle errors
+    "F",     # Pyflakes
+    "W",     # pycodestyle warnings
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+    "PT",    # flake8-pytest-style
+    "ARG",   # flake8-unused-arguments
+    "PERF",  # Perflint
+    "RUF",   # Ruff-specific rules
+]
+
+# Ignore specific rules that don't fit our project
+ignore = [
+    "E501",  # Line too long (formatter handles this)
+    "PT011", # pytest.raises() too strict for our test patterns
+    "ARG001", # Unused function argument common in callbacks
+    "SIM108", # Ternary operator can reduce readability
+]
+
+# Allow automatic fixes for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+# Test files can have more relaxed rules
+"tests/**/*.py" = [
+    "S101",   # Allow assert in tests
+    "ARG",    # Allow unused arguments in test fixtures
+    "PLR2004",  # Allow magic values in tests
+]
+
+# Allow specific rules in __init__.py files
+"__init__.py" = [
+    "F401",   # Allow unused imports (for package exports)
+    "E402",   # Allow module-level imports not at top
+]
+
+[tool.ruff.format]
+# Use double quotes (Black default)
+quote-style = "double"
+
+# Use spaces for indentation (not tabs)
+indent-style = "space"
+
+# Respect magic trailing commas (Black default)
+skip-magic-trailing-comma = false
+
+# Auto-detect line endings (Windows CRLF or Unix LF)
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings
+docstring-code-format = true
+
+# Use dynamic line length for docstring code snippets
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.isort]
+# Import sorting configuration (compatible with isort)
+known-first-party = ["mailtool"]
+
+# ============================================================================
+# TY CONFIGURATION
+# ============================================================================
+# Ty is a fast Python type checker written in Rust
+# Documentation: https://docs.astral.sh/ty/
+# Note: Currently in alpha, configured with minimal rules
+
+[tool.ty]
+# Ty configuration - using minimal rule set for now
+
