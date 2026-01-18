@@ -7,10 +7,13 @@ A WSL2-to-Windows bridge for Outlook automation via COM, optimized for AI agent 
 **Stack**: Python + pywin32 (COM) → Outlook (Windows)
 
 **Entry Points**:
-- `outlook.sh` (WSL2) → `outlook.bat` (Windows) → `src/mailtool_outlook_bridge.py`
+- `outlook.sh` (WSL2) → `outlook.bat` (Windows) → `src/mailtool/bridge.py`
 - `run_tests.sh` (WSL2) → `run_tests.bat` (Windows) → `pytest`
+- **MCP Server** → `mcp_server.py` → Claude Code integration (22 tools)
 
 **Dependency Management**: Uses `uv run --with pywin32` for zero-install Windows execution
+
+**MCP Integration**: Model Context Protocol server for Claude Code, Claude Desktop, and other MCP clients
 
 ## Key Design Decisions
 
@@ -35,8 +38,15 @@ mailtool/
 ├── run_tests.sh            # Test runner (WSL2)
 ├── run_tests.bat           # Test runner (Windows)
 ├── pytest.ini              # Pytest configuration
+├── mcp_server.py           # MCP server for Claude Code (22 tools)
+├── test_mcp_server.py      # MCP server validation script
+├── .claude-plugin/
+│   └── plugin.json         # Claude Code plugin manifest
 ├── src/
-│   └── mailtool_outlook_bridge.py  # Core COM automation (~1240 lines)
+│   └── mailtool/
+│       ├── __init__.py
+│       ├── bridge.py       # Core COM automation (~1090 lines)
+│       └── cli.py          # CLI interface
 └── tests/
     ├── conftest.py         # Session fixtures, warmup, cleanup
     ├── test_bridge.py      # Core connectivity (6 tests)
@@ -56,7 +66,14 @@ mailtool/
 ### Test Isolation
 All test-created items use `[TEST]` prefix for identification and auto-cleanup. Tests use real Outlook data - no mocking.
 
-## Recent Changes (v2.0 → v2.1)
+## Recent Changes (v2.1 → v2.2)
+
+1. **MCP Server**: Added Model Context Protocol server for Claude Code integration
+2. **22 MCP Tools**: Email (9), Calendar (7), Tasks (6) operations exposed via JSON-RPC
+3. **Plugin Manifest**: `.claude-plugin/plugin.json` for auto-loading in Claude Code
+4. **Zero-Config MCP**: Uses `uv run --with pywin32` for dependency-free execution
+
+## Previous Changes (v2.0 → v2.1)
 
 1. **Calendar Bomb Fix**: Added `items.Restrict()` before iterating in `list_calendar_events()`
 2. **WSL Path Translation**: Auto-convert attachment paths in `outlook.sh`
@@ -73,7 +90,47 @@ All test-created items use `[TEST]` prefix for identification and auto-cleanup. 
 
 # From Windows
 run_tests.bat
+
+# Test MCP server (requires Outlook running)
+python test_mcp_server.py
 ```
+
+## MCP Usage
+
+### Installation
+
+```bash
+# Add to Claude Code plugins
+cd ~/.claude-code/plugins
+git clone <repo> mailtool
+
+# Restart Claude Code - plugin auto-loads
+# Start Outlook on Windows
+```
+
+### Available MCP Tools
+
+**Email (9 tools)**: `list_emails`, `get_email`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`
+
+**Calendar (7 tools)**: `list_calendar_events`, `create_appointment`, `get_appointment`, `edit_appointment`, `respond_to_meeting`, `delete_appointment`, `get_free_busy`
+
+**Tasks (6 tools)**: `list_tasks`, `create_task`, `get_task`, `edit_task`, `complete_task`, `delete_task`
+
+### Example Claude Code Interactions
+
+```
+You: Show me my last 5 unread emails
+
+You: Create a task "Review Q1 report" due Friday with high priority
+
+You: Schedule a team meeting for tomorrow at 2pm in Room 101
+
+You: Accept the meeting invitation from John
+
+You: What's on my calendar this week?
+```
+
+See [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for complete documentation.
 
 ## Known Limitations
 

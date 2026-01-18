@@ -1,0 +1,24 @@
+{
+  "name": "mailtool-outlook-bridge",
+  "version": "2.1.0",
+  "description": "Outlook automation via COM - exposes email, calendar, and task management to Claude Code through MCP",
+  "author": "Sam <s.mok@utwente.nl>",
+  "license": "MIT",
+  "requires": {
+    "claude-code": ">=0.6.0"
+  },
+  "mcpServers": {
+    "mailtool": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "pywin32",
+        "${CLAUDE_PLUGIN_ROOT}/mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

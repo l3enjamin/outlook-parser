@@ -68,10 +68,27 @@ mailtool/
 - ⚠️ Windows-specific (COM automation)
 - ⚠️ Read-only for emails (can be extended)
 
+## Claude Code Integration (MCP)
+
+**NEW: This now includes an MCP (Model Context Protocol) server for Claude Code integration!**
+
+Install as a Claude Code plugin to give Claude access to your Outlook:
+
+```bash
+# Clone to your Claude Code plugins directory
+git clone <repo> ~/.claude-code/plugins/mailtool
+```
+
+Then Claude Code can:
+- 📧 Read, send, reply to, and manage emails
+- 📅 View, create, and manage calendar appointments
+- ✅ Create, complete, and manage tasks
+
+See [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for full documentation.
+
 ## Future Directions
 
 This could become:
-- **MCP Server**: Expose as Model Context Protocol server for Claude
 - **CLI Tool**: Full-featured email/calendar CLI
 - **Web App**: Backend for a web interface
 - **Library**: Importable Python module
