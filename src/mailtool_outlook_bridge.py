@@ -18,6 +18,8 @@ Usage:
     python outlook_com_bridge.py email --id <entry_id>
 """
 
+# Modified to test pre-commit hook
+
 import win32com.client
 import pywintypes
 import json

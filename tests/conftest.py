@@ -5,6 +5,8 @@ This module provides shared fixtures and test utilities for testing the Outlook 
 All tests use real Outlook data - no mocking.
 """
 
+# Modified to test pre-commit hook
+
 import sys
 import time
 import uuid

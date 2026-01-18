@@ -4,6 +4,8 @@ Core bridge connectivity and basic functionality tests.
 These tests verify that the Outlook COM bridge can connect and perform basic operations.
 """
 
+# Modified to test pre-commit hook
+
 import pytest
 from .conftest import assert_valid_entry_id
 

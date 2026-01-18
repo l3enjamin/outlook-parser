@@ -8,3 +8,5 @@ To run tests:
     From WSL:   ./run_tests.sh
     From Windows: run_tests.bat
 """
+
+# Modified to test pre-commit hook
