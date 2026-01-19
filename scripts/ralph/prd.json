@@ -129,7 +129,7 @@
       "title": "Implement list_emails tool",
       "description": "Migrate list_emails tool to use FastMCP @mcp.tool() decorator, return list[EmailSummary], handle limit and folder parameters, convert bridge list_emails() output to models",
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "phase": 4
     },
     {

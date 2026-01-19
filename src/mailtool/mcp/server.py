@@ -17,6 +17,7 @@ from mailtool.mcp.lifespan import outlook_lifespan
 from mailtool.mcp.models import (
     AppointmentDetails,
     EmailDetails,
+    EmailSummary,
     OperationResult,
     TaskSummary,
 )
@@ -51,8 +52,47 @@ def _get_bridge():
 
 
 # ============================================================================
-# Email Tools (US-008: get_email, US-011: mark_email, US-013: delete_email)
+# Email Tools (US-008: get_email, US-011: mark_email, US-013: delete_email, US-016: list_emails)
 # ============================================================================
+
+
+@mcp.tool()
+def list_emails(limit: int = 10, folder: str = "Inbox") -> list[EmailSummary]:
+    """
+    List emails from the specified folder.
+
+    Retrieves a list of email summaries from the specified folder, sorted by
+    received time (most recent first). Uses O(1) direct access for each email.
+
+    Args:
+        limit: Maximum number of emails to return (default: 10)
+        folder: Folder name to list emails from (default: "Inbox")
+
+    Returns:
+        list[EmailSummary]: List of email summaries with basic information
+
+    Raises:
+        McpError: If bridge is not initialized or folder cannot be accessed
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # List emails from bridge
+    result = bridge.list_emails(limit=limit, folder=folder)
+
+    # Convert bridge result to list of EmailSummary models
+    return [
+        EmailSummary(
+            entry_id=email["entry_id"],
+            subject=email["subject"],
+            sender=email["sender"],
+            sender_name=email["sender_name"],
+            received_time=email["received_time"],
+            unread=email["unread"],
+            has_attachments=email["has_attachments"],
+        )
+        for email in result
+    ]
 
 
 @mcp.tool()
