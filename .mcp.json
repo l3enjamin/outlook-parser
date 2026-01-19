@@ -1,0 +1,15 @@
+{
+  "default": {
+    "command": "uv",
+    "args": [
+      "run",
+      "--with",
+      "pywin32",
+      "-m",
+      "mailtool.mcp.server"
+    ],
+    "env": {
+      "PYTHONUNBUFFERED": "1"
+    }
+  }
+}
