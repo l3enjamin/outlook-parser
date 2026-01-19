@@ -89,7 +89,7 @@
       "title": "Implement mark_email tool",
       "description": "Migrate mark_email tool to use FastMCP @mcp.tool() decorator, return OperationResult model, handle bridge.mark_email_read() call with unread parameter",
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "phase": 3
     },
     {
