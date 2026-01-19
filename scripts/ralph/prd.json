@@ -289,7 +289,7 @@
       "title": "Write integration tests",
       "description": "Create tests/mcp/test_integration.py with end-to-end workflow tests for complete email, calendar, and task operations",
       "priority": 36,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {

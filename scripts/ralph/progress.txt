@@ -800,3 +800,36 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - Test fixtures with module-level bridge state: resources._set_bridge(mock_bridge) and cleanup with resources._set_bridge(None)
   - All Phase 6 testing now complete: US-034 (tool tests), US-035 (resource tests)
   - Next: US-036 (integration tests) - end-to-end workflow tests
+## 2025-01-19 06:00 - US-036: Write integration tests
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created tests/mcp/test_integration.py with comprehensive end-to-end workflow tests
+- Implemented 34 integration tests organized into 6 test classes:
+  - TestEmailWorkflow (6 tests): Complete email workflows (list, get, reply, forward, mark, move, delete, search)
+  - TestCalendarWorkflow (7 tests): Complete calendar workflows (list, get, create, edit, respond, delete, free/busy)
+  - TestTaskWorkflow (7 tests): Complete task workflows (list, get, create, edit, complete, delete)
+  - TestCrossDomainWorkflows (3 tests): Cross-domain workflows (email→task, email→appointment, task→appointment)
+  - TestResourceQueries (6 tests): Resource registration and helper function tests
+  - TestErrorHandling (4 tests): Error handling for non-existent items and uninitialized bridge
+  - TestPerformance (3 tests): Performance characteristics (multiple folders, large limits, operation sequences)
+- All tests use mock bridge to avoid requiring Outlook to be running
+- Tests verify realistic multi-step workflows combining multiple tools
+- Tests verify resource registration and bridge state management
+- Tests verify error handling for edge cases
+- All 34 tests passing (total test count: 147 = 43 models + 26 resources + 44 tools + 34 integration)
+- All code passes ruff linting and formatting checks
+- Committed: feat(mcp): US-036 - Write integration tests
+- Files changed: tests/mcp/test_integration.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - Integration tests should test realistic workflows, not just individual functions
+  - Cross-domain tests verify tools work together (email → task, email → appointment)
+  - Mock fixture must set bridge in both server and resources modules
+  - Error handling tests should use generic Exception with noqa: B017 for edge cases
+  - Bridge method names: get_email_body, get_appointment, get_task (not get_appointment_body, get_task_body)
+  - Resource tests verify registration rather than direct function calls (resources registered via @mcp.resource())
+  - Bridge state management: _get_bridge() raises RuntimeError when not initialized, doesn't return None
+  - Integration tests provide confidence that tools work together in realistic scenarios
+  - Test structure: Workflow classes group related tests by domain (email, calendar, task)
+  - Performance tests verify behavior with large limits and multiple operations
+  - All Phase 6 integration testing now complete: US-036
+  - Total test coverage: 147 tests across 4 test files (models, resources, tools, integration)
+  - Next: US-037 (custom exceptions) - begins remaining Phase 6 tasks
