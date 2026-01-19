@@ -329,7 +329,7 @@
       "title": "Update MCP_INTEGRATION.md",
       "description": "Update MCP_INTEGRATION.md with SDK v2 patterns, tool catalog with return types, resource documentation, and usage examples",
       "priority": 41,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {
@@ -337,7 +337,7 @@
       "title": "Update plugin.json",
       "description": "Update .claude-plugin/plugin.json to point to new SDK server entry point (mailtool.mcp.server) and bump version to 2.3.0",
       "priority": 42,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {

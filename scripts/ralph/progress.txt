@@ -980,3 +980,25 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - FastMCP decorator pattern is simpler than hand-rolled MCP implementation
   - All Phase 6 documentation updates now complete: US-039, US-040
   - Next: US-041 (update MCP_INTEGRATION.md) - tool catalog and resources documentation
+
+## 2025-01-19 07:15 - US-041/US-042: Update MCP_INTEGRATION.md and plugin.json
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified US-041 already complete (MCP_INTEGRATION.md was updated in US-039)
+- Updated .claude-plugin/plugin.json to point to new SDK server entry point
+- Changed from ${CLAUDE_PLUGIN_ROOT}/mcp_server.py to mailtool.mcp.server module
+- Bumped plugin version from 2.1.0 to 2.3.0
+- Updated plugin description to mention MCP SDK v2
+- Changed command args from script path to module invocation (-m mailtool.mcp.server)
+- Validated JSON syntax is correct
+- All 166 MCP tests still passing
+- All code passes ruff linting and formatting checks (new MCP SDK v2 code)
+- Committed: feat(mcp): US-042 - Update plugin.json to v2.3.0 with SDK v2 entry point
+- Files changed: .claude-plugin/plugin.json, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - MCP plugin entry point should use module invocation (-m) not script path
+  - Plugin version should match package version (2.3.0)
+  - Plugin description should mention key features (MCP SDK v2)
+  - uv run --with pywin32 -m mailtool.mcp.server is the correct invocation
+  - Legacy mcp_server.py is kept in root for rollback (not updated in plugin.json)
+  - All Phase 6 documentation and plugin configuration now complete: US-039, US-040, US-041, US-042
+  - Next: US-043 (update CI/CD workflow) - add MCP tests to GitHub Actions
