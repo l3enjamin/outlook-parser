@@ -4,6 +4,22 @@ Access your Office 365 email and calendar from WSL2 via Windows Outlook COM auto
 
 **Uses [uv](https://github.com/astral-sh/uv) for dependency management - no global Python needed!**
 
+## 🚀 Installation (Claude Code Marketplace)
+
+**Recommended**: Install via the Claude Code Marketplace for automatic updates:
+
+```bash
+# Add the marketplace
+/plugin marketplace add utsmok/mailtool
+
+# Install the plugin
+/plugin install mailtool
+```
+
+This will install:
+- **MCP Server** with 24 tools for email, calendar, and task management
+- **Daily Planner Skill** for intelligent daily planning
+
 ## Prerequisites
 
 - Windows with Outlook (classic) installed and running
@@ -55,11 +71,14 @@ mailtool/
 │       ├── cli.py          # CLI interface
 │       └── mcp/            # MCP Server (SDK v2 + FastMCP)
 │           ├── __init__.py
-│           ├── server.py   # FastMCP server with 23 tools
+│           ├── server.py   # FastMCP server with 24 tools
 │           ├── models.py   # Pydantic models
 │           ├── lifespan.py # Async COM bridge lifecycle
 │           ├── resources.py # 7 resources
 │           └── exceptions.py # Custom exceptions
+├── skills/
+│   └── daily-planner/       # Daily Planner skill for Claude Code
+│       └── skill.md
 ├── tests/
 │   ├── conftest.py         # Test fixtures
 │   ├── test_bridge.py      # Core connectivity tests
@@ -103,7 +122,7 @@ This includes a Model Context Protocol (MCP) server for Claude Code integration 
 
 ### Key Features
 
-- **23 Tools** for email, calendar, and task management
+- **24 Tools** for email, calendar, and task management
 - **7 Resources** for quick data access (inbox, calendar, tasks)
 - **Structured Output** - All tools return typed Pydantic models
 - **Type Safety** - Full type annotations for better IDE support
@@ -111,11 +130,17 @@ This includes a Model Context Protocol (MCP) server for Claude Code integration 
 - **Logging** - Comprehensive logging for debugging and monitoring
 - **Zero-Config** - Uses `uv run --with pywin32` for dependency-free execution
 
-### Installation
+### Manual Installation
+
+If you prefer manual installation or want to contribute:
 
 ```bash
-# Clone to your Claude Code plugins directory
-git clone <repo> ~/.claude-code/plugins/mailtool
+# Clone the repository
+git clone https://github.com/utsmok/mailtool.git
+cd mailtool
+
+# Install in editable mode
+uv pip install -e .
 ```
 
 Then Claude Code can:

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "marketplace_name": "Sam's Outlook Tools",
+  "maintainer": {
+    "type": "individual",
+    "name": "Sam",
+    "url": "https://github.com/utsmok/mailtool"
+  },
+  "plugins": [
+    {
+      "name": "mailtool",
+      "description": "Outlook integration for Claude Code via MCP. Includes Daily Planner skill for intelligent daily planning with calendar, tasks, and email analysis.",
+      "source": {
+        "type": "local_path",
+        "path": ".."
+      },
+      "version": "2.3.0",
+      "category": "productivity",
+      "tags": ["email", "outlook", "calendar", "mcp", "tasks", "planning"]
+    }
+  ]
+}
