@@ -8,6 +8,7 @@ The server provides 23 tools and 7 resources for Outlook email, calendar, and ta
 All tools return structured Pydantic models for type safety and LLM understanding.
 """
 
+import logging
 from typing import TYPE_CHECKING
 
 from mcp.server import FastMCP
@@ -34,6 +35,10 @@ from mailtool.mcp.resources import (
 
 if TYPE_CHECKING:
     from mailtool.bridge import OutlookBridge
+
+# Configure logging for the MCP server
+# Logs are written to stderr for debugging and monitoring
+logger = logging.getLogger(__name__)
 
 # Create FastMCP server instance
 # The lifespan parameter manages Outlook COM bridge lifecycle (creation, warmup, cleanup)
@@ -62,9 +67,9 @@ def _get_bridge():
     """
     global _bridge
     if _bridge is None:
-        raise OutlookComError(
-            "Outlook bridge not initialized. Is the server running?"
-        )
+        logger.error("Outlook bridge not initialized. Is the server running?")
+        raise OutlookComError("Outlook bridge not initialized. Is the server running?")
+    logger.debug("Retrieved Outlook bridge instance")
     return _bridge
 
 
@@ -138,7 +143,10 @@ def get_email(entry_id: str) -> EmailDetails:
 
     # Check if email was found
     if result is None:
+        logger.error(f"Email not found: {entry_id}")
         raise OutlookNotFoundError("Email not found", entry_id=entry_id)
+
+    logger.debug(f"Retrieved email: {entry_id}")
 
     # Convert bridge result to EmailDetails model
     # Note: EmailDetails doesn't have 'unread' field (bridge.get_email_body doesn't return it)
@@ -533,7 +541,10 @@ def get_appointment(entry_id: str) -> AppointmentDetails:
 
     # Check if appointment was found
     if result is None:
+        logger.error(f"Appointment not found: {entry_id}")
         raise OutlookNotFoundError("Appointment not found", entry_id=entry_id)
+
+    logger.debug(f"Retrieved appointment: {entry_id}")
 
     # Convert bridge result to AppointmentDetails model
     # Note: AppointmentDetails extends AppointmentSummary, adding 'body' field
@@ -906,7 +917,10 @@ def get_task(entry_id: str) -> TaskSummary:
 
     # Check if task was found
     if result is None:
+        logger.error(f"Task not found: {entry_id}")
         raise OutlookNotFoundError("Task not found", entry_id=entry_id)
+
+    logger.debug(f"Retrieved task: {entry_id}")
 
     # Convert bridge result to TaskSummary model
     # Note: TaskSummary includes all fields from bridge.get_task()

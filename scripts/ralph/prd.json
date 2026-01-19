@@ -305,7 +305,7 @@
       "title": "Add logging to MCP server",
       "description": "Add proper logging configuration to src/mailtool/mcp/server.py with error logging for debugging and monitoring",
       "priority": 38,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {
