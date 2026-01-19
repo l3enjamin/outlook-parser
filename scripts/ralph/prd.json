@@ -105,7 +105,7 @@
       "title": "Implement delete_email tool",
       "description": "Migrate delete_email tool to use FastMCP @mcp.tool() decorator, return OperationResult model, handle bridge.delete_email() call",
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "phase": 3
     },
     {

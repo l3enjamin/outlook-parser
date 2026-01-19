@@ -51,7 +51,7 @@ def _get_bridge():
 
 
 # ============================================================================
-# Email Tools (US-008: get_email, US-011: mark_email)
+# Email Tools (US-008: get_email, US-011: mark_email, US-013: delete_email)
 # ============================================================================
 
 
@@ -129,6 +129,41 @@ def mark_email(entry_id: str, unread: bool = False) -> OperationResult:
         return OperationResult(
             success=False,
             message=f"Failed to mark email as {'unread' if unread else 'read'}",
+        )
+
+
+@mcp.tool()
+def delete_email(entry_id: str) -> OperationResult:
+    """
+    Delete an email.
+
+    Permanently deletes an email using O(1) direct access via EntryID.
+
+    Args:
+        entry_id: Outlook EntryID of the email (O(1) direct access)
+
+    Returns:
+        OperationResult: Result of the operation with success status and message
+
+    Raises:
+        McpError: If bridge is not initialized
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # Delete email via bridge
+    result = bridge.delete_email(entry_id)
+
+    # Convert boolean result to OperationResult
+    if result:
+        return OperationResult(
+            success=True,
+            message="Email deleted successfully",
+        )
+    else:
+        return OperationResult(
+            success=False,
+            message="Failed to delete email",
         )
 
 
