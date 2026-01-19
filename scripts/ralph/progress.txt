@@ -507,3 +507,184 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - Server now has 15 tools registered (14 email + calendar list tool)
   - First Phase 5 calendar tool complete
   - Next: US-024 (create_appointment) - more complex with multiple parameters
+
+## 2025-01-19 05:00 - US-024: Implement create_appointment tool
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Migrated create_appointment tool to use FastMCP @mcp.tool() decorator
+- Returns CreateAppointmentResult model with 3 fields (success, entry_id, message)
+- Handles 8 parameters: subject, start, end, location, body, all_day, required_attendees, optional_attendees
+- Correctly handles two bridge return types:
+  - str (EntryID): Appointment created successfully → success=True, entry_id=<EntryID>
+  - None: Creation failed → success=False, entry_id=None
+- Updated Calendar Tools section header to include US-024
+- Added CreateAppointmentResult import to models import block
+- All code passes ruff linting and formatting checks
+- All 43 Pydantic model tests still passing
+- Server imports successfully and tool is registered with correct signature
+- Committed: feat(mcp): US-024 - Implement create_appointment tool
+- Files changed: src/mailtool/mcp/server.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - create_appointment follows similar pattern to send_email but simpler (2 return types vs 3)
+  - Bridge.create_appointment() returns str (EntryID) or None (not True/False like boolean operations)
+  - CreateAppointmentResult.entry_id is optional (None for failed, str for success)
+  - Function signature with multiple optional parameters: (subject: str, start: str, end: str, location: str = "", body: str = "", all_day: bool = False, required_attendees: str | None = None, optional_attendees: str | None = None) -> CreateAppointmentResult
+  - Docstring present and descriptive for LLM understanding
+  - Module-level bridge pattern works consistently with complex tools
+  - Server now has 16 tools registered (14 email + 2 calendar tools)
+  - Second Phase 5 calendar tool complete
+  - Next: US-025 (edit_appointment), US-026 (respond_to_meeting), US-027 (get_free_busy), US-028 (calendar resources)
+
+## 2025-01-19 05:05 - US-025: Implement edit_appointment tool
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Migrated edit_appointment tool to use FastMCP @mcp.tool() decorator
+- Returns OperationResult model with success boolean and message
+- Handles entry_id and all optional appointment parameters (required_attendees, optional_attendees, subject, start, end, location, body)
+- Only updates fields that are provided (non-None parameters)
+- Updated Calendar Tools section header to include US-025
+- All code passes ruff linting and formatting checks
+- Server imports successfully and tool is registered with correct signature
+- Server now has 17 tools registered (14 email + 3 calendar tools)
+- Committed: feat(mcp): US-025 - Implement edit_appointment tool
+- Files changed: src/mailtool/mcp/server.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - edit_appointment follows same OperationResult pattern as delete operations
+  - Bridge.edit_appointment() returns True/False (not None like get_* methods)
+  - Function signature with all optional parameters except entry_id: (entry_id: str, required_attendees: str | None = None, optional_attendees: str | None = None, subject: str | None = None, start: str | None = None, end: str | None = None, location: str | None = None, body: str | None = None) -> OperationResult
+  - Docstring present and descriptive for LLM understanding
+  - Bridge.edit_appointment() updates only provided fields (checks if parameter is not None before setting)
+  - Module-level bridge pattern works consistently with edit operations
+  - Pre-commit bypass not needed (ruff checks passed without pywin32 issues)
+  - Third Phase 5 calendar tool complete
+  - Next: US-026 (respond_to_meeting), US-027 (get_free_busy), US-028 (calendar resources)
+
+## 2025-01-19 05:10 - US-026: Implement respond_to_meeting tool
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Migrated respond_to_meeting tool to use FastMCP @mcp.tool() decorator
+- Returns OperationResult model with success boolean and message
+- Handles entry_id and response parameters (accept, decline, tentative)
+- Dynamic messages based on response type (e.g., "Meeting accepted successfully")
+- Updated Calendar Tools section header to include US-026
+- All code passes ruff linting and formatting checks
+- Server imports successfully and tool is registered with correct signature
+- Server now has 18 tools registered (14 email + 4 calendar tools)
+- Committed: feat(mcp): US-026 - Implement respond_to_meeting tool
+- Files changed: src/mailtool/mcp/server.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - respond_to_meeting follows same OperationResult pattern as edit_appointment
+  - Bridge.respond_to_meeting() returns True/False (not None like get_* methods)
+  - Function signature: (entry_id: str, response: str) -> OperationResult
+  - Response parameter is case-insensitive in bridge (converts to lower)
+  - Bridge uses response_map to convert string responses to Outlook codes (accept=3, decline=4, tentative=2)
+  - Dynamic message strings provide better user feedback (e.g., "Meeting accepted successfully")
+  - Bridge.respond_to_meeting() calls item.Response() and item.Send() to send response
+  - Module-level bridge pattern works consistently
+  - Pre-commit bypass not needed (ruff checks passed without pywin32 issues)
+  - Fourth Phase 5 calendar tool complete
+  - Next: US-027 (get_free_busy), US-028 (calendar resources)
+
+## 2025-01-19 05:15 - US-027: Implement get_free_busy tool
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Migrated get_free_busy tool to use FastMCP @mcp.tool() decorator
+- Returns FreeBusyInfo model with email, dates, free_busy string, resolved flag, and error field
+- Handles email_address, start_date, and end_date parameters (all optional)
+- email_address defaults to current user if not provided
+- start_date defaults to today if not provided
+- end_date defaults to start + 1 day if not provided
+- Added FreeBusyInfo import to models import block
+- Updated Calendar Tools section header to include US-027
+- All code passes ruff linting and formatting checks
+- Server imports successfully and tool is registered with correct signature
+- Server now has 19 tools registered (14 email + 5 calendar tools)
+- Committed: feat(mcp): US-027 - Implement get_free_busy tool
+- Files changed: src/mailtool/mcp/server.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - get_free_busy returns FreeBusyInfo model (not OperationResult like other calendar tools)
+  - Bridge.get_free_busy() returns dict with different fields depending on success/error
+  - Use dict.get() with defaults for optional fields (start_date, end_date, free_busy, error)
+  - FreeBusyInfo model handles both success and error cases (resolved flag)
+  - Function signature with all optional parameters: (email_address: str | None = None, start_date: str | None = None, end_date: str | None = None) -> FreeBusyInfo
+  - Bridge.get_free_busy() defaults to current user if email_address is None
+  - Bridge.get_free_busy() handles string dates (YYYY-MM-DD) and converts to datetime
+  - Free/busy status codes: 0=Free, 1=Tentative, 2=Busy, 3=Out of Office, 4=Working Elsewhere
+  - Module-level bridge pattern works consistently
+  - Pre-commit bypass not needed (ruff checks passed without pywin32 issues)
+  - Fifth and final Phase 5 calendar tool complete (all calendar tools done!)
+  - Next: US-028 (calendar resources) - first resource implementation for calendar
+
+## 2025-01-19 05:20 - US-028: Implement calendar resources
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created register_calendar_resources() function in resources.py
+- Registered 2 calendar resources with FastMCP server:
+  - calendar://today - List today's calendar events (days=1)
+  - calendar://week - List calendar events for the next 7 days (days=7)
+- Implemented helper functions:
+  - _format_appointment_summary() - Format AppointmentSummary as readable text
+  - _format_appointment_details() - Format AppointmentDetails as readable text (reserved for future template resource)
+- Added AppointmentSummary and AppointmentDetails imports to resources.py
+- Updated server.py to import and call register_calendar_resources(mcp)
+- Updated module docstring to document calendar resources
+- All code passes ruff linting and formatting checks
+- Server now has 19 tools + 5 resources (3 email + 2 calendar)
+- Committed: feat(mcp): US-028 - Implement calendar resources
+- Files changed: src/mailtool/mcp/resources.py, src/mailtool/mcp/server.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - Calendar resources follow same pattern as email resources (US-022)
+  - Resources use @mcp.resource(uri="...") decorator, not @mcp.tool()
+  - Resources return formatted text (str), not Pydantic models
+  - Resources are registered separately from tools (register_calendar_resources(mcp) function)
+  - Resources._resource_manager._resources stores regular resources (dict-like)
+  - Resources._resource_manager._templates stores template resources (dict-like)
+  - Calendar resources don't use URI parameters (unlike email://{entry_id} template resource)
+  - Bridge.list_calendar_events(days=1) returns today's events, (days=7) returns this week's events
+  - Helper functions for formatting keep resource functions clean
+  - Module-level bridge pattern extends to resources (resources._get_bridge())
+  - All Phase 5 calendar resources now complete: US-028
+  - All Phase 5 tasks complete: US-023 through US-028 (6 calendar user stories)
+  - Next: US-029 (list_tasks), US-030 (list_all_tasks), US-031 (create_task), US-032 (edit_task), US-033 (task resources)
+
+## 2025-01-19 05:25 - US-029: Implement list_tasks tool
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Migrated list_tasks tool to use FastMCP @mcp.tool() decorator
+- Returns list[TaskSummary] with 8 fields each (entry_id, subject, body, due_date, status, priority, complete, percent_complete)
+- Handles include_completed parameter with default (include_completed=False)
+- Converts bridge list_tasks() output to TaskSummary models using list comprehension
+- Updated Task Tools section header to include US-029 and US-030
+- All code passes ruff linting and formatting checks
+- Server imports successfully and tool is registered with correct signature
+- Committed: feat(mcp): US-029 - Implement list_tasks tool
+- Files changed: src/mailtool/mcp/server.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - list_tasks follows same list[TaskSummary] return pattern as list_emails and list_calendar_events
+  - Bridge.list_tasks() returns list of dicts with exact same fields as TaskSummary model
+  - List comprehension pattern works consistently for converting bridge output
+  - Function signature with default parameter: (include_completed: bool = False) -> list[TaskSummary]
+  - Docstring present and descriptive for LLM understanding
+  - Module-level bridge pattern works consistently with list-returning tools
+  - Server now has 20 tools registered (14 email + 5 calendar + 1 task)
+  - First Phase 5 task tool complete
+  - Next: US-030 (list_all_tasks) - similar pattern but with hardcoded include_completed=True
+
+## 2025-01-19 05:30 - US-030: Implement list_all_tasks tool
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Migrated list_all_tasks tool to use FastMCP @mcp.tool() decorator
+- Returns list[TaskSummary] with 8 fields each (entry_id, subject, body, due_date, status, priority, complete, percent_complete)
+- No parameters needed (hardcoded include_completed=True)
+- Calls bridge.list_tasks(include_completed=True) internally
+- Converts bridge list_tasks() output to TaskSummary models using list comprehension
+- Updated Task Tools section header to include US-031 and US-032 (future user stories)
+- Updated module docstring tool count from 20 to 21 tools
+- All code passes ruff linting and formatting checks
+- All 43 Pydantic model tests still passing
+- Server imports successfully and tool is registered with correct signature
+- Committed: feat(mcp): US-030 - Implement list_all_tasks tool
+- Files changed: src/mailtool/mcp/server.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - list_all_tasks follows same list[TaskSummary] return pattern as list_tasks
+  - Convenience function pattern: list_all_tasks() calls bridge.list_tasks(include_completed=True)
+  - No parameters needed (hardcoded behavior is simpler for LLMs)
+  - Function signature: () -> list[TaskSummary] (no parameters)
+  - Docstring present and descriptive for LLM understanding
+  - Module-level bridge pattern works consistently with list-returning tools
+  - Server now has 21 tools registered (14 email + 5 calendar + 2 task)
+  - Second Phase 5 task tool complete
+  - Next: US-031 (create_task) - more complex with multiple parameters and CreateTaskResult return type
