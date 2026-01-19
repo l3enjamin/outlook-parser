@@ -13,4 +13,4 @@ Modules:
 - exceptions: Custom exception classes for error handling
 """
 
-__version__ = "2.3.0"
+__version__ = "0.8.1"
