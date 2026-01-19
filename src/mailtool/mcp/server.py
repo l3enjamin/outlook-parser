@@ -791,8 +791,47 @@ def get_free_busy(
 
 
 # ============================================================================
-# Task Tools (US-010: get_task, US-012: complete_task, US-015: delete_task)
+# Task Tools (US-010: get_task, US-012: complete_task, US-015: delete_task, US-029: list_tasks, US-030: list_all_tasks)
 # ============================================================================
+
+
+@mcp.tool()
+def list_tasks(include_completed: bool = False) -> list[TaskSummary]:
+    """
+    List tasks from the Outlook Tasks folder.
+
+    Retrieves a list of tasks from the Outlook Tasks folder.
+    By default, returns only incomplete tasks. Optionally includes completed tasks.
+
+    Args:
+        include_completed: If True, return all tasks. If False (default), return only incomplete tasks.
+
+    Returns:
+        list[TaskSummary]: List of task summaries with basic information
+
+    Raises:
+        McpError: If bridge is not initialized
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # List tasks via bridge
+    result = bridge.list_tasks(include_completed=include_completed)
+
+    # Convert bridge result to list of TaskSummary models
+    return [
+        TaskSummary(
+            entry_id=task["entry_id"],
+            subject=task["subject"],
+            body=task["body"],
+            due_date=task["due_date"],
+            status=task["status"],
+            priority=task["priority"],
+            complete=task["complete"],
+            percent_complete=task["percent_complete"],
+        )
+        for task in result
+    ]
 
 
 @mcp.tool()

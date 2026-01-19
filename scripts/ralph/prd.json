@@ -233,7 +233,7 @@
       "title": "Implement list_tasks tool",
       "description": "Migrate list_tasks tool to use FastMCP @mcp.tool() decorator, return list[TaskSummary], handle include_completed parameter (default False)",
       "priority": 29,
-      "passes": false,
+      "passes": true,
       "phase": 5
     },
     {
