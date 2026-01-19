@@ -4,7 +4,7 @@ This module provides the main FastMCP server instance for Outlook automation.
 It implements the Model Context Protocol (MCP) using the official MCP Python SDK v2
 with the FastMCP framework.
 
-The server provides 22 tools and 5 resources for Outlook email, calendar, and task management.
+The server provides 23 tools and 5 resources for Outlook email, calendar, and task management.
 All tools return structured Pydantic models for type safety and LLM understanding.
 """
 
@@ -1035,6 +1035,61 @@ def create_task(
             entry_id=None,
             message="Failed to create task",
         )
+
+
+@mcp.tool()
+def edit_task(
+    entry_id: str,
+    subject: str | None = None,
+    body: str | None = None,
+    due_date: str | None = None,
+    priority: int | None = None,
+    percent_complete: float | None = None,
+    complete: bool | None = None,
+) -> OperationResult:
+    """
+    Edit an existing task.
+
+    Updates an existing task in the Outlook Tasks folder.
+    Only updates fields that are provided (non-None parameters).
+    Supports updating subject, description, due date, priority, completion status, and percent complete.
+
+    Args:
+        entry_id: Task entry ID to edit
+        subject: New task subject/title (optional)
+        body: New task description or body text (optional)
+        due_date: New due date in 'YYYY-MM-DD' format (optional)
+        priority: New task priority - 0=Low, 1=Normal, 2=High (optional)
+        percent_complete: New percent complete value 0-100 (optional)
+        complete: Mark task as complete or incomplete (optional)
+
+    Returns:
+        OperationResult: Result with success status and message
+
+    Raises:
+        McpError: If bridge is not initialized
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # Edit task via bridge
+    # Note: bridge parameter is 'importance', not 'priority'
+    result = bridge.edit_task(
+        entry_id=entry_id,
+        subject=subject,
+        body=body,
+        due_date=due_date,
+        importance=priority,
+        percent_complete=percent_complete,
+        complete=complete,
+    )
+
+    # Convert bridge result to OperationResult
+    # Bridge returns: True if successful, False if failed
+    if result:
+        return OperationResult(success=True, message="Task edited successfully")
+    else:
+        return OperationResult(success=False, message="Failed to edit task")
 
 
 if __name__ == "__main__":
