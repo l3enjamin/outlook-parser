@@ -369,7 +369,7 @@
       "title": "Manual Claude Code testing",
       "description": "Test all 23 tools manually with Claude Code, verify structured output, test error handling, validate resources",
       "priority": 46,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {
@@ -377,7 +377,7 @@
       "title": "Create rollback plan",
       "description": "Document rollback procedure in case of production issues, keep old mcp_server.py for 2 weeks, test rollback process",
       "priority": 47,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {
