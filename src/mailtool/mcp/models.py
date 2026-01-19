@@ -132,10 +132,49 @@ class FreeBusyInfo(BaseModel):
 # ============================================================================
 # Task Models (US-006)
 # ============================================================================
-# TODO: Implement TaskSummary, CreateTaskResult
+
+
+class TaskSummary(BaseModel):
+    """Summary representation of a task for list views"""
+
+    entry_id: str = Field(description="Outlook EntryID for O(1) direct access")
+    subject: str = Field(description="Task subject line")
+    body: str = Field(default="", description="Task description/body text")
+    due_date: str | None = Field(
+        default=None,
+        description="Due date in 'YYYY-MM-DD' format or None if not set",
+    )
+    status: int | None = Field(
+        default=None,
+        description="Outlook task status code (0=NotStarted, 1=InProgress, 2=Complete, 3=Waiting, 4=Deferred, 5=Other)",
+    )
+    priority: int | None = Field(
+        default=None,
+        description="Task priority/importance (0=Low, 1=Normal, 2=High)",
+    )
+    complete: bool = Field(description="Whether the task is marked complete")
+    percent_complete: float = Field(
+        description="Task completion percentage (0.0 to 100.0)"
+    )
+
+
+class CreateTaskResult(BaseModel):
+    """Result of creating a task"""
+
+    success: bool = Field(description="Whether the operation succeeded")
+    entry_id: str | None = Field(
+        default=None, description="EntryID of created task (None if failed)"
+    )
+    message: str = Field(description="Human-readable result message")
 
 
 # ============================================================================
 # Common Result Models (US-007)
 # ============================================================================
-# TODO: Implement OperationResult
+
+
+class OperationResult(BaseModel):
+    """Generic result for boolean operations (mark, delete, move, complete, etc.)"""
+
+    success: bool = Field(description="Whether the operation succeeded")
+    message: str = Field(description="Human-readable result message")

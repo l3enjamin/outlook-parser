@@ -12,10 +12,13 @@ from mailtool.mcp.models import (
     AppointmentDetails,
     AppointmentSummary,
     CreateAppointmentResult,
+    CreateTaskResult,
     EmailDetails,
     EmailSummary,
     FreeBusyInfo,
+    OperationResult,
     SendEmailResult,
+    TaskSummary,
 )
 
 
@@ -512,3 +515,212 @@ class TestCalendarModelSerialization:
         # Test model_dump_json
         json_str = info.model_dump_json()
         assert "user@example.com" in json_str
+
+
+class TestTaskSummary:
+    """Test TaskSummary model validation"""
+
+    def test_valid_task_summary(self):
+        """Test TaskSummary accepts valid data"""
+        data = {
+            "entry_id": "task-entry-id-123",
+            "subject": "Review Q1 Report",
+            "body": "Complete review of Q1 financial report",
+            "due_date": "2025-01-25",
+            "status": 0,
+            "priority": 2,
+            "complete": False,
+            "percent_complete": 0.0,
+        }
+        task = TaskSummary(**data)
+        assert task.entry_id == "task-entry-id-123"
+        assert task.subject == "Review Q1 Report"
+        assert task.body == "Complete review of Q1 financial report"
+        assert task.due_date == "2025-01-25"
+        assert task.status == 0
+        assert task.priority == 2
+        assert task.complete is False
+        assert task.percent_complete == 0.0
+
+    def test_task_summary_with_none_optional_fields(self):
+        """Test TaskSummary accepts None for optional fields"""
+        data = {
+            "entry_id": "task-entry-id-456",
+            "subject": "Quick Task",
+            "body": "",
+            "due_date": None,
+            "status": None,
+            "priority": None,
+            "complete": False,
+            "percent_complete": 0.0,
+        }
+        task = TaskSummary(**data)
+        assert task.due_date is None
+        assert task.status is None
+        assert task.priority is None
+        assert task.body == ""
+
+    def test_task_summary_default_values(self):
+        """Test TaskSummary default values for body"""
+        data = {
+            "entry_id": "task-entry-id-789",
+            "subject": "Task with default body",
+            "due_date": "2025-01-30",
+            "status": 1,
+            "priority": 1,
+            "complete": False,
+            "percent_complete": 50.0,
+        }
+        task = TaskSummary(**data)
+        assert task.body == ""
+
+    def test_task_summary_missing_required_fields(self):
+        """Test TaskSummary raises ValidationError for missing required fields"""
+        data = {
+            "entry_id": "task-entry-id-999",
+            # Missing: subject, complete, percent_complete
+        }
+        with pytest.raises(ValidationError):
+            TaskSummary(**data)
+
+    def test_task_summary_completed(self):
+        """Test TaskSummary with completed task"""
+        data = {
+            "entry_id": "task-entry-id-111",
+            "subject": "Completed Task",
+            "body": "This task is done",
+            "due_date": "2025-01-20",
+            "status": 2,
+            "priority": 1,
+            "complete": True,
+            "percent_complete": 100.0,
+        }
+        task = TaskSummary(**data)
+        assert task.complete is True
+        assert task.percent_complete == 100.0
+        assert task.status == 2
+
+
+class TestCreateTaskResult:
+    """Test CreateTaskResult model validation"""
+
+    def test_successful_task_creation(self):
+        """Test CreateTaskResult for successful task creation"""
+        data = {
+            "success": True,
+            "entry_id": "new-task-entry-id-123",
+            "message": "Task created successfully",
+        }
+        result = CreateTaskResult(**data)
+        assert result.success is True
+        assert result.entry_id == "new-task-entry-id-123"
+        assert result.message == "Task created successfully"
+
+    def test_failed_task_creation(self):
+        """Test CreateTaskResult for failed task creation"""
+        data = {
+            "success": False,
+            "entry_id": None,
+            "message": "Failed to create task",
+        }
+        result = CreateTaskResult(**data)
+        assert result.success is False
+        assert result.entry_id is None
+        assert result.message == "Failed to create task"
+
+    def test_task_result_default_entry_id(self):
+        """Test CreateTaskResult entry_id defaults to None"""
+        data = {
+            "success": True,
+            "message": "Task created successfully",
+        }
+        result = CreateTaskResult(**data)
+        assert result.success is True
+        assert result.entry_id is None
+
+
+class TestOperationResult:
+    """Test OperationResult model validation"""
+
+    def test_successful_operation(self):
+        """Test OperationResult for successful operation"""
+        data = {
+            "success": True,
+            "message": "Operation completed successfully",
+        }
+        result = OperationResult(**data)
+        assert result.success is True
+        assert result.message == "Operation completed successfully"
+
+    def test_failed_operation(self):
+        """Test OperationResult for failed operation"""
+        data = {
+            "success": False,
+            "message": "Operation failed",
+        }
+        result = OperationResult(**data)
+        assert result.success is False
+        assert result.message == "Operation failed"
+
+    def test_operation_result_missing_required_fields(self):
+        """Test OperationResult raises ValidationError for missing required fields"""
+        data = {
+            "success": True,
+            # Missing: message
+        }
+        with pytest.raises(ValidationError):
+            OperationResult(**data)
+
+
+class TestTaskModelSerialization:
+    """Test task model serialization and deserialization"""
+
+    def test_task_summary_serialization(self):
+        """Test TaskSummary can be serialized to dict and JSON"""
+        data = {
+            "entry_id": "task-entry-id-123",
+            "subject": "Review Q1 Report",
+            "body": "Complete review of Q1 financial report",
+            "due_date": "2025-01-25",
+            "status": 0,
+            "priority": 2,
+            "complete": False,
+            "percent_complete": 0.0,
+        }
+        task = TaskSummary(**data)
+        # Test model_dump
+        dumped = task.model_dump()
+        assert dumped == data
+        # Test model_dump_json
+        json_str = task.model_dump_json()
+        assert "Review Q1 Report" in json_str
+        assert "Complete review of Q1 financial report" in json_str
+
+    def test_create_task_result_serialization(self):
+        """Test CreateTaskResult can be serialized to dict and JSON"""
+        data = {
+            "success": True,
+            "entry_id": "new-task-entry-id-456",
+            "message": "Task created successfully",
+        }
+        result = CreateTaskResult(**data)
+        # Test model_dump
+        dumped = result.model_dump()
+        assert dumped == data
+        # Test model_dump_json
+        json_str = result.model_dump_json()
+        assert "new-task-entry-id-456" in json_str
+
+    def test_operation_result_serialization(self):
+        """Test OperationResult can be serialized to dict and JSON"""
+        data = {
+            "success": True,
+            "message": "Task marked as complete",
+        }
+        result = OperationResult(**data)
+        # Test model_dump
+        dumped = result.model_dump()
+        assert dumped == data
+        # Test model_dump_json
+        json_str = result.model_dump_json()
+        assert "Task marked as complete" in json_str
