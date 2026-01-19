@@ -14,7 +14,7 @@ from mcp import McpError
 from mcp.server import FastMCP
 
 from mailtool.mcp.lifespan import outlook_lifespan
-from mailtool.mcp.models import EmailDetails
+from mailtool.mcp.models import AppointmentDetails, EmailDetails
 
 if TYPE_CHECKING:
     from mailtool.bridge import OutlookBridge
@@ -88,6 +88,57 @@ def get_email(entry_id: str) -> EmailDetails:
         html_body=result["html_body"],
         received_time=result["received_time"],
         has_attachments=result["has_attachments"],
+    )
+
+
+# ============================================================================
+# Calendar Tools (US-009: get_appointment)
+# ============================================================================
+
+
+@mcp.tool()
+def get_appointment(entry_id: str) -> AppointmentDetails:
+    """
+    Get full appointment details and body by entry ID.
+
+    Retrieves complete appointment information including body content and all
+    meeting metadata using O(1) direct access via EntryID.
+
+    Args:
+        entry_id: Outlook EntryID of the appointment (O(1) direct access)
+
+    Returns:
+        AppointmentDetails: Complete appointment details including body content
+
+    Raises:
+        McpError: If appointment not found or cannot be accessed
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # Get appointment details from bridge
+    result = bridge.get_appointment(entry_id)
+
+    # Check if appointment was found
+    if result is None:
+        raise McpError(f"Appointment not found: {entry_id}")
+
+    # Convert bridge result to AppointmentDetails model
+    # Note: AppointmentDetails extends AppointmentSummary, adding 'body' field
+    return AppointmentDetails(
+        entry_id=result["entry_id"],
+        subject=result["subject"],
+        start=result["start"],
+        end=result["end"],
+        location=result["location"],
+        organizer=result["organizer"],
+        body=result["body"],
+        all_day=result["all_day"],
+        required_attendees=result["required_attendees"],
+        optional_attendees=result["optional_attendees"],
+        response_status=result["response_status"],
+        meeting_status=result["meeting_status"],
+        response_requested=result["response_requested"],
     )
 
 
