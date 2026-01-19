@@ -36,24 +36,28 @@ Migrate the mailtool MCP server from a hand-rolled JSON-RPC implementation to th
 **Description:** As a developer, I need to add MCP SDK dependencies and create the new package structure so that I can start building the FastMCP-based server.
 
 **Acceptance Criteria:**
-- [ ] Add `mcp>=0.9.0` to `pyproject.toml` dependencies
-- [ ] Create `src/mailtool/mcp/` package with `__init__.py`
-- [ ] Create empty `server.py`, `models.py`, `resources.py`, `lifespan.py` files
-- [ ] Update `pyproject.toml` version to 2.3.0
-- [ ] Run `uv sync --all-groups` successfully
-- [ ] Commit: "feat(mcp): add MCP SDK v2 dependency and package structure"
+- [x] Add `mcp>=0.9.0` to `pyproject.toml` dependencies
+- [x] Create `src/mailtool/mcp/` package with `__init__.py`
+- [x] Create empty `server.py`, `models.py`, `resources.py`, `lifespan.py` files
+- [x] Update `pyproject.toml` version to 2.3.0
+- [x] Run `uv sync --all-groups` successfully
+- [x] Commit: "feat(mcp): add MCP SDK v2 dependency and package structure"
+
+**Status**: ✅ COMPLETED (2025-01-19)
 
 ### US-002: Implement lifespan management
 **Description:** As a developer, I need to manage Outlook bridge lifecycle so that COM objects are properly initialized and cleaned up.
 
 **Acceptance Criteria:**
-- [ ] Create `OutlookContext` dataclass with bridge attribute
-- [ ] Implement `outlook_lifespan()` async context manager
-- [ ] Create `OutlookBridge` instance on startup with warmup (5 retry attempts)
-- [ ] Release COM objects and force garbage collection on shutdown
-- [ ] Add warmup connection test (real COM call to Inbox.Items.Count)
-- [ ] Test lifespan starts and shuts down without errors
-- [ ] Typecheck passes
+- [x] Create `OutlookContext` dataclass with bridge attribute
+- [x] Implement `outlook_lifespan()` async context manager
+- [x] Create `OutlookBridge` instance on startup with warmup (5 retry attempts)
+- [x] Release COM objects and force garbage collection on shutdown
+- [x] Add warmup connection test (real COM call to Inbox.Items.Count)
+- [x] Test lifespan starts and shuts down without errors
+- [x] Typecheck passes
+
+**Status**: ✅ COMPLETED (2025-01-19)
 
 ### US-003: Create FastMCP server skeleton
 **Description:** As a developer, I need to create the basic FastMCP server instance so that tools and resources can be registered.
