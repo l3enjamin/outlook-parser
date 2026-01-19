@@ -1,15 +1,10 @@
 {
   "default": {
-    "command": "cmd",
+    "command": "uv",
     "args": [
-      "/c",
-      "set",
-      "PYTHONPATH=${CLAUDE_PLUGIN_ROOT}\\src;%PYTHONPATH%",
-      "&&",
-      "cd",
-      "/d",
-      "${CLAUDE_PLUGIN_ROOT}",
-      "&&",
+      "run",
+      "--with",
+      "pywin32",
       "python",
       "-m",
       "mailtool.mcp.server"
