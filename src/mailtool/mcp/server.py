@@ -4,7 +4,7 @@ This module provides the main FastMCP server instance for Outlook automation.
 It implements the Model Context Protocol (MCP) using the official MCP Python SDK v2
 with the FastMCP framework.
 
-The server provides 23 tools and 5 resources for Outlook email, calendar, and task management.
+The server provides 23 tools and 7 resources for Outlook email, calendar, and task management.
 All tools return structured Pydantic models for type safety and LLM understanding.
 """
 
@@ -26,7 +26,11 @@ from mailtool.mcp.models import (
     SendEmailResult,
     TaskSummary,
 )
-from mailtool.mcp.resources import register_calendar_resources, register_email_resources
+from mailtool.mcp.resources import (
+    register_calendar_resources,
+    register_email_resources,
+    register_task_resources,
+)
 
 if TYPE_CHECKING:
     from mailtool.bridge import OutlookBridge
@@ -38,10 +42,10 @@ mcp = FastMCP(
     lifespan=outlook_lifespan,
 )
 
-# Register email resources (US-022) and calendar resources (US-028)
-# Task resources will be added in US-033
+# Register email resources (US-022), calendar resources (US-028), and task resources (US-033)
 register_email_resources(mcp)
 register_calendar_resources(mcp)
+register_task_resources(mcp)
 
 # Module-level bridge instance (set by lifespan, accessed by tools)
 _bridge: "OutlookBridge | None" = None

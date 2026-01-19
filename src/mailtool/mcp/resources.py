@@ -12,7 +12,9 @@ Calendar resources:
 - calendar://today - List today's calendar events
 - calendar://week - List calendar events for the next 7 days
 
-Task resources will be added in US-033
+Task resources:
+- tasks://active - List active (incomplete) tasks
+- tasks://all - List all tasks (including completed)
 """
 
 from typing import TYPE_CHECKING
@@ -24,6 +26,7 @@ from mailtool.mcp.models import (
     AppointmentSummary,
     EmailDetails,
     EmailSummary,
+    TaskSummary,
 )
 
 if TYPE_CHECKING:
@@ -434,6 +437,144 @@ def register_calendar_resources(mcp: FastMCP) -> None:
         lines = [f"Week's Calendar ({len(events)} events)", ""]
         for event in events:
             lines.append(_format_appointment_summary(event))
+            lines.append("-" * 60)
+
+        return "\n".join(lines)
+
+
+def _format_task_summary(task: TaskSummary) -> str:
+    """Format a task summary as readable text.
+
+    Args:
+        task: TaskSummary model
+
+    Returns:
+        Formatted text representation
+    """
+    # Map status codes to human-readable names
+    status_map = {
+        0: "Not Started",
+        1: "In Progress",
+        2: "Complete",
+        3: "Waiting",
+        4: "Deferred",
+        5: "Other",
+    }
+    status_str = (
+        status_map.get(task.status, "Unknown") if task.status is not None else "N/A"
+    )
+
+    # Map priority codes to human-readable names
+    priority_map = {0: "Low", 1: "Normal", 2: "High"}
+    priority_str = (
+        priority_map.get(task.priority, "Unknown")
+        if task.priority is not None
+        else "N/A"
+    )
+
+    return f"""Subject: {task.subject}
+Due Date: {task.due_date or "No due date"}
+Status: {status_str}
+Priority: {priority_str}
+Complete: {"Yes" if task.complete else "No"}
+Percent Complete: {task.percent_complete:.1f}%
+Entry ID: {task.entry_id}
+"""
+
+
+def register_task_resources(mcp: FastMCP) -> None:
+    """Register all task resources with the FastMCP server.
+
+    Args:
+        mcp: FastMCP server instance
+
+    This function registers two task resources:
+    1. tasks://active - Lists active (incomplete) tasks
+    2. tasks://all - Lists all tasks (including completed)
+    """
+
+    @mcp.resource(
+        uri="tasks://active",
+        name="tasks_active",
+        title="Active Tasks",
+        description="List active (incomplete) tasks",
+    )
+    def tasks_active() -> str:
+        """Get active (incomplete) tasks.
+
+        Returns:
+            Formatted text with task summaries
+        """
+        bridge = _get_bridge()
+
+        # Get active tasks from bridge (include_completed=False)
+        tasks_data = bridge.list_tasks(include_completed=False)
+
+        # Convert to TaskSummary models
+        tasks = [
+            TaskSummary(
+                entry_id=task["entry_id"],
+                subject=task["subject"],
+                body=task["body"],
+                due_date=task["due_date"],
+                status=task["status"],
+                priority=task["priority"],
+                complete=task["complete"],
+                percent_complete=task["percent_complete"],
+            )
+            for task in tasks_data
+        ]
+
+        # Format as text
+        if not tasks:
+            return "No active tasks"
+
+        lines = [f"Active Tasks ({len(tasks)} items)", ""]
+        for task in tasks:
+            lines.append(_format_task_summary(task))
+            lines.append("-" * 60)
+
+        return "\n".join(lines)
+
+    @mcp.resource(
+        uri="tasks://all",
+        name="tasks_all",
+        title="All Tasks",
+        description="List all tasks (including completed)",
+    )
+    def tasks_all() -> str:
+        """Get all tasks (including completed).
+
+        Returns:
+            Formatted text with task summaries
+        """
+        bridge = _get_bridge()
+
+        # Get all tasks from bridge (include_completed=True)
+        tasks_data = bridge.list_tasks(include_completed=True)
+
+        # Convert to TaskSummary models
+        tasks = [
+            TaskSummary(
+                entry_id=task["entry_id"],
+                subject=task["subject"],
+                body=task["body"],
+                due_date=task["due_date"],
+                status=task["status"],
+                priority=task["priority"],
+                complete=task["complete"],
+                percent_complete=task["percent_complete"],
+            )
+            for task in tasks_data
+        ]
+
+        # Format as text
+        if not tasks:
+            return "No tasks found"
+
+        lines = [f"All Tasks ({len(tasks)} items)", ""]
+        for task in tasks:
+            lines.append(_format_task_summary(task))
             lines.append("-" * 60)
 
         return "\n".join(lines)
