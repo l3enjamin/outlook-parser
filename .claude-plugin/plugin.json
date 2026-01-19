@@ -7,8 +7,5 @@
       "command": "uv",
       "args": ["run", "--with", "pywin32", "-m", "mailtool.mcp.server"]
     }
-  },
-  "skills": [
-    "skills/daily-planner"
-  ]
+  }
 }
