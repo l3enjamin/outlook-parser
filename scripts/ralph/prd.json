@@ -265,7 +265,7 @@
       "title": "Implement task resources",
       "description": "Create register_task_resources() function in resources.py, register tasks://active and tasks://all resources using @mcp.resource() decorator",
       "priority": 33,
-      "passes": false,
+      "passes": true,
       "phase": 5
     },
     {
