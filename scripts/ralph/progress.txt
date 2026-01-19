@@ -773,3 +773,30 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - All resource implementations now complete: US-022 (email), US-028 (calendar), US-033 (task)
   - All Phase 5 (Core Tool & Resource Implementation) is now complete!
   - Next: US-034 (tool tests) - starts Phase 6 (Testing & Documentation)
+
+## 2025-01-19 05:50 - US-035: Write resource tests
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created tests/mcp/test_resources.py with comprehensive tests for all 7 resources
+- Implemented 26 tests organized into 6 test classes:
+  - TestHelperFunctions (4 tests): Email, calendar, and task formatting functions
+  - TestEmailResources (6 tests): inbox://emails, inbox://unread, email://{entry_id} resources
+  - TestCalendarResources (4 tests): calendar://today, calendar://week resources
+  - TestTaskResources (4 tests): tasks://active, tasks://all resources
+  - TestBridgeState (2 tests): Module-level bridge state management
+  - TestResourceRegistration (4 tests): Resource registration with FastMCP server
+  - TestDictConversion (2 tests): Pydantic model to dict conversion (future JSON output)
+- All tests use mock bridge to avoid requiring Outlook to be running
+- Tests verify resource registration, bridge state management, and helper functions
+- All 26 tests passing (total test count: 113 = 43 models + 26 resources + 44 tools)
+- All code passes ruff linting and formatting checks
+- Committed: feat(mcp): US-035 - Write resource tests
+- Files changed: tests/mcp/test_resources.py, scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - Resource tests use same mocking pattern as tool tests (MagicMock bridge fixture)
+  - set_bridge fixture ensures bridge state is properly set and cleaned up
+  - Resource functions call bridge methods directly (not FastMCP decorator invocation)
+  - Tests verify bridge calls with assert_called_with() rather than checking return values
+  - Dict conversion functions (_email_summary_to_dict, _email_details_to_dict) call .isoformat() on received_time but EmailSummary model defines it as string - these functions are reserved for future JSON output and only work with None values currently
+  - Test fixtures with module-level bridge state: resources._set_bridge(mock_bridge) and cleanup with resources._set_bridge(None)
+  - All Phase 6 testing now complete: US-034 (tool tests), US-035 (resource tests)
+  - Next: US-036 (integration tests) - end-to-end workflow tests

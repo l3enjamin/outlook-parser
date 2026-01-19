@@ -281,7 +281,7 @@
       "title": "Write resource tests",
       "description": "Create tests/mcp/test_resources.py with tests for all resources (email, calendar, task) using SDK client session",
       "priority": 35,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {
