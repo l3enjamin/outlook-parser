@@ -4,7 +4,7 @@ This module provides the main FastMCP server instance for Outlook automation.
 It implements the Model Context Protocol (MCP) using the official MCP Python SDK v2
 with the FastMCP framework.
 
-The server provides 23 tools and 7 resources for Outlook email, calendar, and task management.
+The server provides 24 tools and 7 resources for Outlook email, calendar, and task management.
 All tools return structured Pydantic models for type safety and LLM understanding.
 """
 
@@ -101,6 +101,49 @@ def list_emails(limit: int = 10, folder: str = "Inbox") -> list[EmailSummary]:
 
     # List emails from bridge
     result = bridge.list_emails(limit=limit, folder=folder)
+
+    # Convert bridge result to list of EmailSummary models
+    return [
+        EmailSummary(
+            entry_id=email["entry_id"],
+            subject=email["subject"],
+            sender=email["sender"],
+            sender_name=email["sender_name"],
+            received_time=email["received_time"],
+            unread=email["unread"],
+            has_attachments=email["has_attachments"],
+        )
+        for email in result
+    ]
+
+
+@mcp.tool()
+def list_unread_emails(limit: int = 10) -> list[EmailSummary]:
+    """
+    List unread emails from the Inbox.
+
+    Retrieves the most recent unread emails from the Inbox, sorted by received
+    time (most recent first). Uses Outlook Restrict filter for efficient querying
+    (O(1) search at COM level).
+
+    Args:
+        limit: Maximum number of unread emails to return (default: 10)
+
+    Returns:
+        list[EmailSummary]: List of unread email summaries with basic information
+
+    Raises:
+        OutlookComError: If bridge is not initialized
+
+    Note:
+        This function uses the Outlook Restrict filter with '[Unread] = TRUE'
+        for efficient querying at the COM level, avoiding unnecessary iteration.
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # Search for unread emails via bridge using Restrict filter
+    result = bridge.search_emails(filter_query="[Unread] = TRUE", limit=limit)
 
     # Convert bridge result to list of EmailSummary models
     return [
