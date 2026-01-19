@@ -20,6 +20,7 @@ from mailtool.mcp.models import (
     CreateAppointmentResult,
     EmailDetails,
     EmailSummary,
+    FreeBusyInfo,
     OperationResult,
     SendEmailResult,
     TaskSummary,
@@ -442,7 +443,7 @@ def search_emails(filter_query: str, limit: int = 100) -> list[EmailSummary]:
 
 
 # ============================================================================
-# Calendar Tools (US-009: get_appointment, US-014: delete_appointment, US-023: list_calendar_events, US-024: create_appointment, US-025: edit_appointment, US-026: respond_to_meeting)
+# Calendar Tools (US-009: get_appointment, US-014: delete_appointment, US-023: list_calendar_events, US-024: create_appointment, US-025: edit_appointment, US-026: respond_to_meeting, US-027: get_free_busy)
 # ============================================================================
 
 
@@ -738,6 +739,54 @@ def respond_to_meeting(entry_id: str, response: str) -> OperationResult:
             success=False,
             message=f"Failed to {response.lower()} meeting",
         )
+
+
+@mcp.tool()
+def get_free_busy(
+    email_address: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> FreeBusyInfo:
+    """
+    Get free/busy status for an email address.
+
+    Retrieves free/busy information for a specified email address using the
+    Outlook FreeBusy method. Defaults to current user and today's date if not specified.
+
+    Args:
+        email_address: Email address to check (optional, defaults to current user)
+        start_date: Start date in 'YYYY-MM-DD' format (optional, defaults to today)
+        end_date: End date in 'YYYY-MM-DD' format (optional, defaults to start + 1 day)
+
+    Returns:
+        FreeBusyInfo: Free/busy information with email, dates, status string, and resolution status
+
+    Raises:
+        McpError: If bridge is not initialized
+
+    Note:
+        Free/busy status codes: 0=Free, 1=Tentative, 2=Busy, 3=Out of Office, 4=Working Elsewhere
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # Get free/busy info via bridge
+    result = bridge.get_free_busy(
+        email_address=email_address,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    # Convert bridge result to FreeBusyInfo model
+    # Bridge returns dict with different fields depending on success/error
+    return FreeBusyInfo(
+        email=result.get("email", email_address or "unknown"),
+        start_date=result.get("start_date"),
+        end_date=result.get("end_date"),
+        free_busy=result.get("free_busy"),
+        resolved=result.get("resolved", False),
+        error=result.get("error"),
+    )
 
 
 # ============================================================================

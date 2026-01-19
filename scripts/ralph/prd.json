@@ -217,7 +217,7 @@
       "title": "Implement get_free_busy tool",
       "description": "Migrate get_free_busy tool to use FastMCP @mcp.tool() decorator, return FreeBusyInfo model, handle email_address, start_date, end_date parameters",
       "priority": 27,
-      "passes": false,
+      "passes": true,
       "phase": 5
     },
     {
