@@ -1,4 +1,5 @@
 {
+  "_comment": "NOTE: The mcpServers field below is currently broken due to GitHub issue #16143. Users must manually add the MCP server to ~/.claude.json. See CLAUDE.md for instructions.",
   "name": "mailtool-outlook-bridge",
   "version": "2.3.0",
   "description": "Outlook automation via COM - exposes email, calendar, and task management to Claude Code through MCP SDK v2",
