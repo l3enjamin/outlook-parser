@@ -16,6 +16,7 @@ from mcp.server import FastMCP
 from mailtool.mcp.lifespan import outlook_lifespan
 from mailtool.mcp.models import (
     AppointmentDetails,
+    AppointmentSummary,
     EmailDetails,
     EmailSummary,
     OperationResult,
@@ -440,8 +441,59 @@ def search_emails(filter_query: str, limit: int = 100) -> list[EmailSummary]:
 
 
 # ============================================================================
-# Calendar Tools (US-009: get_appointment, US-014: delete_appointment)
+# Calendar Tools (US-009: get_appointment, US-014: delete_appointment, US-023: list_calendar_events)
 # ============================================================================
+
+
+@mcp.tool()
+def list_calendar_events(
+    days: int = 7, all_events: bool = False
+) -> list[AppointmentSummary]:
+    """
+    List calendar events for the next N days.
+
+    Retrieves a list of calendar events/appointments from the Outlook calendar.
+    Supports date filtering and includes recurring meetings.
+    Uses O(1) direct access and COM-level filtering for performance.
+
+    Args:
+        days: Number of days ahead to look (default: 7)
+        all_events: If True, return all events without date filtering (default: False)
+
+    Returns:
+        list[AppointmentSummary]: List of appointment summaries with basic information
+
+    Raises:
+        McpError: If bridge is not initialized
+
+    Note:
+        This function handles the "Calendar Bomb" issue by applying COM-level
+        Restrict filters before Python iteration to prevent infinite recurring meetings.
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # List calendar events via bridge
+    result = bridge.list_calendar_events(days=days, all_events=all_events)
+
+    # Convert bridge result to list of AppointmentSummary models
+    return [
+        AppointmentSummary(
+            entry_id=event["entry_id"],
+            subject=event["subject"],
+            start=event["start"],
+            end=event["end"],
+            location=event["location"],
+            organizer=event["organizer"],
+            all_day=event["all_day"],
+            required_attendees=event["required_attendees"],
+            optional_attendees=event["optional_attendees"],
+            response_status=event["response_status"],
+            meeting_status=event["meeting_status"],
+            response_requested=event["response_requested"],
+        )
+        for event in result
+    ]
 
 
 @mcp.tool()
