@@ -44,6 +44,30 @@ git clone <this-repo> ~/.claude-code/plugins/mailtool
 
 Make sure Outlook is running and logged into your account before using any MCP tools.
 
+## MCP Configuration
+
+The MCP server is configured in `.mcp.json` at the plugin root:
+
+```json
+{
+  "default": {
+    "command": "uv",
+    "args": [
+      "run",
+      "--with",
+      "pywin32",
+      "-m",
+      "mailtool.mcp.server"
+    ],
+    "env": {
+      "PYTHONUNBUFFERED": "1"
+    }
+  }
+}
+```
+
+> **Note:** We use a separate `.mcp.json` file rather than inline `mcpServers` in `plugin.json` due to [Claude Code Bug #16143](https://github.com/anthropics/claude-code/issues/16143) where inline `mcpServers` may be ignored during plugin manifest parsing. This is the recommended pattern for Claude Code plugins.
+
 ## Usage Examples
 
 ### Email Operations

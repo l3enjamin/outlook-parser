@@ -194,6 +194,13 @@ This could become:
 - These appear because of WSL2 → Windows path translation
 - Safe to ignore, everything still works
 
+### MCP tools not available after plugin installation
+- This may be due to [Claude Code Bug #16143](https://github.com/anthropics/claude-code/issues/16143)
+- The MCP server is configured in `.mcp.json` (not inline in `plugin.json`) to work around this issue
+- Try restarting Claude Code after plugin installation
+- Verify the plugin installed correctly: `/plugin list`
+- Check MCP server status: `/mcp`
+
 ## Development
 
 ```bash

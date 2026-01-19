@@ -1,11 +1,5 @@
 {
   "name": "mailtool",
   "version": "2.3.0",
-  "description": "Outlook integration via MCP. Manage emails, calendar, and tasks.",
-  "mcpServers": {
-    "default": {
-      "command": "uv",
-      "args": ["run", "--with", "pywin32", "-m", "mailtool.mcp.server"]
-    }
-  }
+  "description": "Outlook integration via MCP. Manage emails, calendar, and tasks."
 }
