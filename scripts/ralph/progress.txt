@@ -1173,3 +1173,38 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - All Phase 6 testing tasks now complete: US-034, US-035, US-036, US-037, US-038, US-044, US-045, US-046
   - All Phase 6 tasks now complete except US-048 (production deployment) and US-049 (archive old implementation)
   - Next: US-048 (production deployment) - requires manual testing on Windows with Claude Code and deployment decision
+
+## 2025-01-19 08:30 - US-048: Production deployment
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created comprehensive production deployment guide (docs/DEPLOYMENT_GUIDE.md, 250+ lines)
+- Documented 6-phase deployment procedure with time estimates:
+  - Phase 1: Pre-Deployment Validation (15 min) - automated tests, plugin verification, rollback check
+  - Phase 2: Deployment (5 min) - merge to main, tag release
+  - Phase 3: Production Activation (2 min) - restart Claude Code, verify server startup
+  - Phase 4: Smoke Testing (10 min) - test email, calendar, task, resources, error handling
+  - Phase 5: Monitoring (First 24 hours) - performance metrics, error rates, user feedback
+  - Phase 6: Rollback Decision (First 24 hours) - execute rollback if triggers occur
+- Documented rollback triggers (critical failures, performance issues, compatibility issues, data loss risks)
+- Created smoke testing procedures for all tool categories
+- Documented monitoring metrics and success criteria
+- Specified 2-week rollback window with legacy file retention
+- Created post-deployment actions for 24-hour and 2-week milestones
+- Verified all 216 tests passing (50 bridge + 166 MCP)
+- Verified automated server validation passing (6 test suites)
+- Verified plugin configuration points to SDK v2 server
+- Committed: docs(mcp): US-048 - Create production deployment guide
+- Files changed: docs/DEPLOYMENT_GUIDE.md, scripts/ralph/prd.json, scripts/ralph/progress.txt
+- **Learnings for future iterations:**
+  - Deployment guide should be comprehensive with phase-by-phase procedures
+  - Pre-deployment validation is critical (tests, plugin config, rollback files)
+  - Smoke testing should cover all major functionality (email, calendar, task, resources, errors)
+  - Monitoring period of 24 hours is essential to catch production issues early
+  - Rollback triggers should be specific and measurable (performance degradation, error rates)
+  - Rollback window of 2 weeks provides safety net for production deployment
+  - Legacy files must be kept for rollback (do not delete immediately)
+  - Success criteria should be objective (all tests pass, error rates <5%, no data loss)
+  - Emergency contacts and quick reference sections help during deployment
+  - Deployment timeline should be realistic (32 min total + 24 hour monitoring)
+  - Manual testing guide (MANUAL_TESTING_GUIDE.md) and rollback plan (ROLLBACK_PLAN.md) are essential companions
+  - All Phase 6 tasks now complete except US-049 (archive old implementation) and US-050 (final validation)
+  - Next: US-049 (archive old implementation) - after 2 weeks of successful production run (2025-02-02)

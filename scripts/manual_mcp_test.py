@@ -43,6 +43,7 @@ try:
         TaskSummary,
     )
     from mailtool.mcp.server import mcp
+
     print("[OK] All imports successful")
 except ImportError as e:
     print(f"[FAIL] Import failed: {e}")
@@ -52,9 +53,9 @@ except ImportError as e:
 
 def print_section(title: str) -> None:
     """Print a section header."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  {title}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
 
 def test_tool_registration() -> dict[str, Any]:
@@ -306,7 +307,9 @@ def test_model_validation() -> dict[str, Any]:
         results["passed"] = False
 
     if results["passed"]:
-        print(f"\n[OK] All {len(results['models_tested'])} models validated successfully")
+        print(
+            f"\n[OK] All {len(results['models_tested'])} models validated successfully"
+        )
     else:
         print(f"\n[FAIL] {len(results['failed_models'])} model(s) failed validation")
 
@@ -324,13 +327,19 @@ def test_tool_signatures() -> dict[str, Any]:
     }
 
     # Sample a few key tools to verify they have the right structure
-    key_tools = ["list_emails", "get_email", "send_email", "create_appointment", "create_task"]
+    key_tools = [
+        "list_emails",
+        "get_email",
+        "send_email",
+        "create_appointment",
+        "create_task",
+    ]
 
     for tool_name in key_tools:
         try:
             tool = mcp._tool_manager._tools[tool_name]
             # Just verify the tool exists and has a name (FastMCP Tool object structure)
-            if hasattr(tool, 'name') or hasattr(tool, 'description'):
+            if hasattr(tool, "name") or hasattr(tool, "description"):
                 print(f"  [OK] {tool_name}: Tool registered correctly")
                 results["tools_tested"].append(tool_name)
             else:
@@ -343,9 +352,13 @@ def test_tool_signatures() -> dict[str, Any]:
             results["passed"] = False
 
     if results["passed"]:
-        print(f"\n[OK] All {len(results['tools_tested'])} key tool signatures validated")
+        print(
+            f"\n[OK] All {len(results['tools_tested'])} key tool signatures validated"
+        )
     else:
-        print(f"\n[FAIL] {len(results['failed_tools'])} tool signature(s) failed validation")
+        print(
+            f"\n[FAIL] {len(results['failed_tools'])} tool signature(s) failed validation"
+        )
 
     return results
 
@@ -410,9 +423,13 @@ def test_exception_classes() -> dict[str, Any]:
             results["passed"] = False
 
         if results["passed"]:
-            print(f"\n[OK] All {len(results['exceptions_tested'])} exception classes validated")
+            print(
+                f"\n[OK] All {len(results['exceptions_tested'])} exception classes validated"
+            )
         else:
-            print(f"\n[FAIL] {len(results['failed_exceptions'])} exception class(es) failed validation")
+            print(
+                f"\n[FAIL] {len(results['failed_exceptions'])} exception class(es) failed validation"
+            )
 
     except ImportError as e:
         print(f"  [FAIL] Failed to import exception classes: {e}")
@@ -475,20 +492,20 @@ def print_summary(results: dict[str, Any]) -> None:
         status = "[OK] PASS" if test_result.get("passed", False) else "[FAIL] FAIL"
         print(f"  {status}: {test_name}")
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     if passed_tests == total_tests:
         print("  [OK] ALL TESTS PASSED")
     else:
         print(f"  [FAIL] {total_tests - passed_tests} TEST SUITE(S) FAILED")
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
 
 
 def main() -> int:
     """Run all manual MCP server tests."""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("  MCP SDK v2 Server Manual Test Suite")
     print("  Testing tool registration, models, and resources")
-    print("="*70)
+    print("=" * 70)
 
     results = {}
 

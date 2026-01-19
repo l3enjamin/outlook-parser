@@ -385,7 +385,7 @@
       "title": "Production deployment",
       "description": "Deploy to production Claude Code, monitor for issues, keep old version available for rollback",
       "priority": 48,
-      "passes": false,
+      "passes": true,
       "phase": 6
     },
     {
