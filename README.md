@@ -203,7 +203,7 @@ See [CLAUDE.md](CLAUDE.md) for development patterns and architecture.
 
 ### Performance Benchmarks
 
-Performance benchmarks are available in `scripts/benchmarks/` to compare the legacy MCP server (v2.2) against the new SDK v2 implementation (v2.3):
+Performance benchmarks are available in `scripts/benchmarks/` for validating MCP server performance:
 
 ```bash
 # Run performance benchmarks (requires Windows with Outlook running)

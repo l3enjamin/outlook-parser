@@ -80,6 +80,7 @@ exclude = [
     ".vscode",
     "__pypackages__",
     "_build",
+    "archive",  # Archived legacy implementations (e.g., v2.2.0-legacy)
     "buck-out",
     "build",
     "dist",
