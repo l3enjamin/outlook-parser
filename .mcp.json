@@ -1,14 +1,10 @@
 {
   "default": {
-    "command": "uv",
+    "command": "cmd",
     "args": [
-      "run",
-      "--with",
-      "pywin32",
-      "-m",
-      "mailtool.mcp.server"
+      "/c",
+      "${CLAUDE_PLUGIN_ROOT}\\start-mcp-server.bat"
     ],
-    "cwd": "${CLAUDE_PLUGIN_ROOT}",
     "env": {
       "PYTHONUNBUFFERED": "1"
     }
