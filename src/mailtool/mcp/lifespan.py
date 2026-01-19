@@ -26,7 +26,7 @@ class OutlookContext:
 
 
 @asynccontextmanager
-async def outlook_lifespan():
+async def outlook_lifespan(app):
     """Async context manager for Outlook bridge lifecycle
 
     This function manages the complete lifecycle of the Outlook COM bridge:
@@ -34,6 +34,9 @@ async def outlook_lifespan():
     2. Warms up the connection with retry attempts
     3. Yields the context for tool/resource access
     4. Cleans up COM objects on shutdown
+
+    Args:
+        app: The FastMCP server instance (not used but required by FastMCP)
 
     Yields:
         OutlookContext: Context object containing the bridge instance
