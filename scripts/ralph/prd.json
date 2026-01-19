@@ -257,7 +257,7 @@
       "title": "Implement edit_task tool",
       "description": "Migrate edit_task tool to use FastMCP @mcp.tool() decorator, return OperationResult model, handle entry_id and all optional task parameters",
       "priority": 32,
-      "passes": false,
+      "passes": true,
       "phase": 5
     },
     {
