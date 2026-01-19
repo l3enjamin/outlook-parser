@@ -12,6 +12,8 @@ import gc
 import logging
 from contextlib import asynccontextmanager
 
+import pythoncom
+
 from mailtool.bridge import OutlookBridge
 
 # Configure logging for the lifespan manager
@@ -89,7 +91,7 @@ async def outlook_lifespan(app):
         yield
 
     finally:
-        # Cleanup: Release COM objects and force garbage collection
+        # Cleanup: Release COM objects, uninitialize COM, and force garbage collection
         logger.info("Shutting down Outlook bridge...")
         if bridge is not None:
             try:
@@ -100,6 +102,13 @@ async def outlook_lifespan(app):
             except Exception as e:
                 logger.error(f"Error releasing COM references: {e}")
 
+        # Uninitialize COM for this thread
+        try:
+            pythoncom.CoUninitialize()
+            logger.debug("Uninitialized COM")
+        except Exception as e:
+            logger.error(f"Error uninitializing COM: {e}")
+
         # Force Python garbage collection to release COM objects
         gc.collect()
         logger.info("Outlook bridge shutdown complete")
@@ -108,12 +117,17 @@ async def outlook_lifespan(app):
 def _create_bridge() -> OutlookBridge:
     """Synchronous function to create OutlookBridge instance
 
+    Initializes COM for the current thread before creating the bridge.
+    This is necessary because the bridge is created in a thread pool executor.
+
     Returns:
         OutlookBridge: The initialized bridge instance
 
     Raises:
         Exception: If Outlook cannot be connected to or launched
     """
+    logger.debug("Initializing COM for thread")
+    pythoncom.CoInitialize()
     logger.debug("Creating OutlookBridge instance")
     return OutlookBridge()
 
