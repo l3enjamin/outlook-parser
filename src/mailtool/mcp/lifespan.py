@@ -1,10 +1,108 @@
-"""
-Lifespan Management for MCP Server
+"""Lifespan Management for MCP Server
 
-This module will contain the Outlook bridge lifecycle management.
-It provides async context manager for:
-- Creating and warming up OutlookBridge instance
+This module provides Outlook bridge lifecycle management for the MCP server.
+It handles:
+- Creating and warming up OutlookBridge instance on startup
 - Releasing COM objects and forcing garbage collection on shutdown
 """
 
-# TODO: Implement lifespan management in US-002
+import asyncio
+import gc
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+
+from mailtool.bridge import OutlookBridge
+
+
+@dataclass
+class OutlookContext:
+    """Context object holding the Outlook bridge instance
+
+    Attributes:
+        bridge: The OutlookBridge instance for COM automation
+    """
+
+    bridge: OutlookBridge
+
+
+@asynccontextmanager
+async def outlook_lifespan():
+    """Async context manager for Outlook bridge lifecycle
+
+    This function manages the complete lifecycle of the Outlook COM bridge:
+    1. Creates OutlookBridge instance on startup
+    2. Warms up the connection with retry attempts
+    3. Yields the context for tool/resource access
+    4. Cleans up COM objects on shutdown
+
+    Yields:
+        OutlookContext: Context object containing the bridge instance
+
+    Raises:
+        Exception: If Outlook cannot be connected to after retry attempts
+    """
+    bridge = None
+    try:
+        # Create Outlook bridge instance (synchronous COM call)
+        # Note: We run this in a thread pool since COM calls are synchronous
+        loop = asyncio.get_event_loop()
+        bridge = await loop.run_in_executor(None, _create_bridge)
+
+        # Warmup: Test that COM is responsive with retries
+        max_retries = 5
+        retry_delay = 0.5  # seconds
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Run a real COM call to ensure Outlook is responsive
+                await loop.run_in_executor(None, _warmup_bridge, bridge)
+                break  # Success - exit retry loop
+            except Exception as e:
+                if attempt == max_retries:
+                    raise Exception(
+                        f"Outlook warmup failed after {max_retries} attempts: {e}"
+                    ) from e
+                # Wait before retry
+                await asyncio.sleep(retry_delay)
+
+        # Yield context for tools/resources to use
+        yield OutlookContext(bridge=bridge)
+
+    finally:
+        # Cleanup: Release COM objects and force garbage collection
+        if bridge is not None:
+            try:
+                # Release COM references
+                bridge.outlook = None
+                bridge.namespace = None
+            except Exception:
+                pass  # Ignore cleanup errors
+
+        # Force Python garbage collection to release COM objects
+        gc.collect()
+
+
+def _create_bridge() -> OutlookBridge:
+    """Synchronous function to create OutlookBridge instance
+
+    Returns:
+        OutlookBridge: The initialized bridge instance
+
+    Raises:
+        Exception: If Outlook cannot be connected to or launched
+    """
+    return OutlookBridge()
+
+
+def _warmup_bridge(bridge: OutlookBridge) -> None:
+    """Synchronous warmup function to test COM connectivity
+
+    Args:
+        bridge: The OutlookBridge instance to test
+
+    Raises:
+        Exception: If COM call fails (Outlook not responsive)
+    """
+    inbox = bridge.get_inbox()
+    # Make a real COM call to test connectivity
+    _ = inbox.Items.Count
