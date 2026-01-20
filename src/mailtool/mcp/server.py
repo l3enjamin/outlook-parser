@@ -478,6 +478,10 @@ def search_emails(filter_query: str, limit: int = 100) -> list[EmailSummary]:
     Searches emails in the Inbox using Outlook Restriction filter (O(1) search).
     Supports SQL-like filter syntax for advanced queries.
 
+    NOTE: For searching by sender email address, especially for internal/Exchange
+    users, use search_emails_by_sender() instead. The SenderEmailAddress filter
+    does not work for Exchange addresses (internal emails).
+
     Args:
         filter_query: SQL-like filter query string (e.g., "[Subject] LIKE '%meeting%'")
         limit: Maximum number of results to return (default: 100)
@@ -491,13 +495,64 @@ def search_emails(filter_query: str, limit: int = 100) -> list[EmailSummary]:
     Examples:
         search_emails("[Subject] LIKE '%project%'")  # Search by subject
         search_emails("[Unread] = TRUE")  # Find unread emails
-        search_emails("[SenderEmailAddress] = 'john@example.com'")  # Search by sender
+        search_emails("[SenderName] LIKE '%John%'")  # Search by sender name (works better than email)
     """
     # Get bridge from module-level state
     bridge = _get_bridge()
 
     # Search emails via bridge
     result = bridge.search_emails(filter_query=filter_query, limit=limit)
+
+    # Convert bridge result to list of EmailSummary models
+    return [
+        EmailSummary(
+            entry_id=email["entry_id"],
+            subject=email["subject"],
+            sender=email["sender"],
+            sender_name=email["sender_name"],
+            received_time=email["received_time"],
+            unread=email["unread"],
+            has_attachments=email["has_attachments"],
+        )
+        for email in result
+    ]
+
+
+@mcp.tool()
+def search_emails_by_sender(
+    sender_email: str, limit: int = 100, folder: str = "Inbox"
+) -> list[EmailSummary]:
+    """
+    Search emails by sender email address (handles Exchange addresses).
+
+    This method properly handles both SMTP and Exchange email addresses.
+    For Exchange users (internal emails), it resolves the Exchange address
+    to SMTP address before matching.
+
+    This is the recommended way to search for emails from a specific sender,
+    especially for internal/Exchange email addresses where SenderEmailAddress
+    filter would not work.
+
+    Args:
+        sender_email: Email address to search for (e.g., "f.muijzer@utwente.nl")
+        limit: Maximum number of results to return (default: 100)
+        folder: Folder name to search in (default: "Inbox")
+
+    Returns:
+        list[EmailSummary]: List of matching email summaries
+
+    Raises:
+        OutlookComError: If bridge is not initialized
+
+    Examples:
+        search_emails_by_sender("john@example.com")  # Search by sender
+        search_emails_by_sender("f.muijzer@utwente.nl", limit=50)  # Internal Exchange user
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # Search emails by sender via bridge
+    result = bridge.search_by_sender(sender_email=sender_email, limit=limit, folder=folder)
 
     # Convert bridge result to list of EmailSummary models
     return [

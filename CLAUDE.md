@@ -11,7 +11,7 @@ A WSL2-to-Windows bridge for Outlook automation via COM, optimized for AI agent 
 **Entry Points**:
 - `outlook.sh` (WSL2) → `outlook.bat` (Windows) → `src/mailtool/bridge.py`
 - `run_tests.sh` (WSL2) → `run_tests.bat` (Windows) → `pytest`
-- **MCP Server** → `src/mailtool/mcp/server.py` → Claude Code integration (25 tools, 7 resources)
+- **MCP Server** → `src/mailtool/mcp/server.py` → Claude Code integration (26 tools, 7 resources)
 
 **Dependency Management**: Uses `uv run --with pywin32` for zero-install Windows execution
 
@@ -61,7 +61,7 @@ mailtool/
 │       ├── cli.py          # CLI interface
 │       └── mcp/            # MCP SDK v2 package (v2.3)
 │           ├── __init__.py
-│           ├── server.py   # FastMCP server with 25 tools
+│           ├── server.py   # FastMCP server with 26 tools
 │           ├── models.py   # Pydantic models (10 models)
 │           ├── resources.py # MCP resources (7 resources)
 │           ├── lifespan.py # Outlook bridge lifecycle management
@@ -109,7 +109,7 @@ All test-created items use `[TEST]` prefix for identification and auto-cleanup. 
 The MCP server uses the official MCP Python SDK v2 with the FastMCP framework for type-safe, declarative tool and resource definitions.
 
 **Key Components**:
-- **FastMCP Server**: `src/mailtool/mcp/server.py` - Main server instance with 25 tools and 7 resources
+- **FastMCP Server**: `src/mailtool/mcp/server.py` - Main server instance with 26 tools and 7 resources
 - **Pydantic Models**: `src/mailtool/mcp/models.py` - 10 models for structured output (Email, Calendar, Task)
 - **MCP Resources**: `src/mailtool/mcp/resources.py` - 7 resources for data access (Email, Calendar, Task)
 - **Lifespan Management**: `src/mailtool/mcp/lifespan.py` - Async context manager for Outlook bridge lifecycle
@@ -264,12 +264,12 @@ class OutlookValidationError(McpError):
 
 1. **MCP SDK v2**: Migrated from hand-rolled MCP implementation to official MCP Python SDK v2
 2. **FastMCP Framework**: Using FastMCP for type-safe, declarative tool and resource definitions
-3. **Structured Output**: All 25 tools return Pydantic models (10 models: Email, Calendar, Task)
+3. **Structured Output**: All 26 tools return Pydantic models (10 models: Email, Calendar, Task)
 4. **MCP Resources**: Added 7 resources for read-only data access (Email, Calendar, Task)
 5. **Async Lifespan**: Async context manager for Outlook bridge lifecycle (creation, warmup, cleanup)
 6. **Custom Exceptions**: 3 exception types (OutlookNotFoundError, OutlookComError, OutlookValidationError)
 7. **Enhanced Logging**: Comprehensive logging for debugging and monitoring (stderr)
-8. **Test Coverage**: 166 MCP tests (models, tools, resources, integration, exceptions)
+8. **Test Coverage**: 170 MCP tests (models, tools, resources, integration, exceptions)
 9. **Type Safety**: TYPE_CHECKING blocks for clean type hints without circular imports
 10. **Module Organization**: 5-module MCP package (server, models, resources, lifespan, exceptions)
 
@@ -377,7 +377,7 @@ The MCP server will auto-start on Claude Code launch. Ensure Outlook is running 
 
 ### Available MCP Tools
 
-**Email (10 tools)**: `list_emails`, `list_unread_emails`, `get_email`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`
+**Email (11 tools)**: `list_emails`, `list_unread_emails`, `get_email`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`, `search_emails_by_sender`
 
 **Calendar (7 tools)**: `list_calendar_events`, `create_appointment`, `get_appointment`, `edit_appointment`, `respond_to_meeting`, `delete_appointment`, `get_free_busy`
 

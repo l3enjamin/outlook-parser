@@ -384,6 +384,49 @@ class TestSearchEmails:
         mock_bridge.search_emails.assert_called_once()
 
 
+class TestSearchEmailsBySender:
+    """Test search_emails_by_sender tool"""
+
+    def test_search_emails_by_sender(self, server_with_mock, mock_bridge):
+        """Test searching emails by sender"""
+        from mailtool.mcp.server import search_emails_by_sender
+
+        # Configure mock to return emails
+        mock_bridge.search_by_sender.return_value = [
+            {
+                "entry_id": "test123",
+                "subject": "Test Email",
+                "sender": "test@example.com",
+                "sender_name": "Test User",
+                "received_time": "2025-01-20 10:00:00",
+                "unread": True,
+                "has_attachments": False,
+            }
+        ]
+
+        result = search_emails_by_sender("test@example.com", limit=100)
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0].sender == "test@example.com"
+        mock_bridge.search_by_sender.assert_called_once_with(
+            sender_email="test@example.com", limit=100, folder="Inbox"
+        )
+
+    def test_search_emails_by_sender_with_folder(self, server_with_mock, mock_bridge):
+        """Test searching emails by sender in specific folder"""
+        from mailtool.mcp.server import search_emails_by_sender
+
+        mock_bridge.search_by_sender.return_value = []
+
+        result = search_emails_by_sender("test@example.com", limit=50, folder="Archive")
+
+        assert isinstance(result, list)
+        mock_bridge.search_by_sender.assert_called_once_with(
+            sender_email="test@example.com", limit=50, folder="Archive"
+        )
+
+
 class TestListUnreadEmails:
     """Test list_unread_emails tool"""
 

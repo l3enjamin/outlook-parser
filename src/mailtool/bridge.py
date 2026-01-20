@@ -22,6 +22,7 @@ Usage:
 
 import contextlib
 import sys
+import traceback
 from datetime import datetime, timedelta
 
 import win32com.client
@@ -66,10 +67,12 @@ class OutlookBridge:
             except Exception:
                 print("Error: Could not connect to or launch Outlook.", file=sys.stderr)
                 print(f"Details: {e}", file=sys.stderr)
+                # output full traceback
                 print(
                     "Hint: Make sure Outlook is installed and you can launch it manually.",
                     file=sys.stderr,
                 )
+                traceback.print_exc()
                 sys.exit(1)
 
         self.namespace = self.outlook.GetNamespace("MAPI")
@@ -1423,6 +1426,69 @@ class OutlookBridge:
             return emails
         except Exception as e:
             print(f"Error searching emails: {e}", file=sys.stderr)
+            return []
+
+    def search_by_sender(self, sender_email, limit=100, folder="Inbox"):
+        """
+        Search emails by sender email address (handles Exchange addresses).
+
+        This method properly handles both SMTP and Exchange email addresses.
+        For Exchange users (internal emails), it resolves the Exchange address
+        to SMTP address before matching.
+
+        Args:
+            sender_email: Email address to search for
+            limit: Max results to return (default: 100)
+            folder: Folder name to search in (default: "Inbox")
+
+        Returns:
+            List of email dictionaries matching the sender
+        """
+        try:
+            # Get the folder
+            if folder == "Inbox":
+                mail_folder = self.get_inbox()
+            else:
+                mail_folder = self.get_folder_by_name(folder)
+                if not mail_folder:
+                    mail_folder = self.get_inbox()
+
+            items = mail_folder.Items
+            # Sort by received time, most recent first
+            items.Sort("[ReceivedTime]", True)
+
+            emails = []
+            count = 0
+            for item in items:
+                if count >= limit:
+                    break
+
+                try:
+                    # Resolve SMTP address (handles Exchange addresses)
+                    smtp_address = self.resolve_smtp_address(item)
+
+                    # Case-insensitive email match
+                    if smtp_address.lower() == sender_email.lower():
+                        email = {
+                            "entry_id": item.EntryID,
+                            "subject": item.Subject,
+                            "sender": smtp_address,
+                            "sender_name": item.SenderName,
+                            "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                            if item.ReceivedTime
+                            else None,
+                            "unread": item.Unread,
+                            "has_attachments": item.Attachments.Count > 0,
+                        }
+                        emails.append(email)
+                        count += 1
+                except Exception:
+                    # Skip items that can't be accessed
+                    continue
+
+            return emails
+        except Exception as e:
+            print(f"Error searching emails by sender: {e}", file=sys.stderr)
             return []
 
     def get_free_busy(

@@ -210,3 +210,44 @@ class TestEmails:
         except Exception:
             # Expected - drafts may not be replyable
             pass
+
+    def test_search_by_sender(self, bridge):
+        """Test searching emails by sender (handles Exchange addresses)"""
+        # Get some emails from inbox to find a sender
+        emails = bridge.list_emails(limit=5)
+
+        if not emails:
+            pytest.skip("No emails in inbox to test sender search")
+
+        # Get sender from first email
+        sender_email = emails[0]["sender"]
+
+        # Search by sender email
+        results = bridge.search_by_sender(sender_email, limit=10)
+
+        assert isinstance(results, list)
+        # Should find at least the email we got the sender from
+        assert len(results) >= 1
+
+        # Verify all results have the correct sender
+        for email in results:
+            assert_email_structure(email)
+            # Sender should match (case-insensitive)
+            assert email["sender"].lower() == sender_email.lower()
+
+    def test_search_by_sender_case_insensitive(self, bridge):
+        """Test that search_by_sender is case-insensitive"""
+        # Get some emails from inbox to find a sender
+        emails = bridge.list_emails(limit=5)
+
+        if not emails:
+            pytest.skip("No emails in inbox to test case-insensitive search")
+
+        sender_email = emails[0]["sender"]
+
+        # Search with different case
+        results = bridge.search_by_sender(sender_email.upper(), limit=10)
+
+        assert isinstance(results, list)
+        # Should still find emails
+        assert len(results) >= 1
