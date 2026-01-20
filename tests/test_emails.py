@@ -174,7 +174,9 @@ class TestEmails:
         # Should find some unread emails (or return empty list if none)
         # All results should be unread
         for email in results:
-            assert email["unread"] is True, "search_emails returned non-unread email when filtering for unread"
+            assert email["unread"] is True, (
+                "search_emails returned non-unread email when filtering for unread"
+            )
 
     def test_move_email_to_folder(self, bridge, test_timestamp, cleanup_helpers):
         """Test moving an email to a different folder"""
