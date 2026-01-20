@@ -282,6 +282,20 @@ def main() -> None:
     # Tasks command
     subparsers.add_parser("tasks", help="List all tasks")
 
+    # List folders command (new)
+    folders_parser = subparsers.add_parser(
+        "folders", help="List folders for an account or all accounts"
+    )
+    folders_parser.add_argument(
+        "--account", help="Account/display name or email to filter folders for"
+    )
+
+    # Set default account command (new)
+    setacc_parser = subparsers.add_parser(
+        "set-account", help="Set the default account/store to use"
+    )
+    setacc_parser.add_argument("--name", required=True, help="Account name or email")
+
     # Get task command
     get_task_parser = subparsers.add_parser("task", help="Get task details")
     get_task_parser.add_argument("--id", required=True, help="Task entry ID")
@@ -415,6 +429,18 @@ def main() -> None:
     elif args.command == "search":
         emails = bridge.search_emails(args.query, limit=args.limit)
         print(json.dumps(emails, indent=2))
+
+    elif args.command == "folders":
+        folders = bridge.list_folders(getattr(args, "account", None))
+        print(json.dumps(folders, indent=2))
+
+    elif args.command == "set-account":
+        ok = bridge.set_default_account(args.name)
+        if ok:
+            print(json.dumps({"status": "success", "account": args.name}))
+        else:
+            print(json.dumps({"status": "error", "message": "Account not found"}))
+            sys.exit(1)
 
     elif args.command == "mark":
         result = bridge.mark_email_read(args.id, unread=args.unread)
