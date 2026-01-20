@@ -171,9 +171,13 @@ class OutlookBridge:
         Returns:
             List of email dictionaries
         """
-        inbox = self.get_folder_by_name(folder)
-        if not inbox:
+        # Use get_inbox() for the default Inbox to ensure correct account
+        if folder == "Inbox":
             inbox = self.get_inbox()
+        else:
+            inbox = self.get_folder_by_name(folder)
+            if not inbox:
+                inbox = self.get_inbox()
 
         items = inbox.Items
 
@@ -998,10 +1002,8 @@ class OutlookBridge:
             List of email dictionaries
         """
         try:
-            # First get the folder
-            folder = self.get_folder_by_name("Inbox")
-            if not folder:
-                folder = self.get_inbox()
+            # Use get_inbox() directly to ensure correct account
+            folder = self.get_inbox()
 
             items = folder.Items
             # Apply restriction filter
