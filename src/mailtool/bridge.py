@@ -20,6 +20,7 @@ Usage:
 
 # Modified to test pre-commit hook
 
+import contextlib
 import sys
 from datetime import datetime, timedelta
 
@@ -48,7 +49,7 @@ class OutlookBridge:
         except Exception:
             return default
 
-    def __init__(self):
+    def __init__(self, default_account: str | None = None):
         """
         Connect to running Outlook instance or start it
 
@@ -72,21 +73,253 @@ class OutlookBridge:
                 sys.exit(1)
 
         self.namespace = self.outlook.GetNamespace("MAPI")
+        # Default account name and root folder (set by set_default_account or via init param)
+        self.default_account_name = None
+        self.default_root_folder = None
+
+        # If provided, attempt to set the default account/store on init
+        if default_account:
+            with contextlib.suppress(Exception):
+                self.set_default_account(default_account)
+
+    # -- Helper methods for account/folder resolution -----------------
+    def _find_root_by_name(self, acc_name: str):
+        """Find and return the root folder object for an account by name (case-insensitive).
+
+        Returns None if not found.
+        """
+        if not acc_name:
+            return None
+        try:
+            count = self.namespace.Folders.Count
+        except Exception:
+            count = None
+
+        if count and count > 0:
+            for i in range(1, count + 1):
+                try:
+                    root = self.namespace.Folders.Item(i)
+                    if str(root.Name).strip().lower() == str(acc_name).strip().lower():
+                        return root
+                except Exception:
+                    continue
+
+        # Fallback: try a reasonable range if Count isn't available
+        for i in range(1, 10):
+            try:
+                root = self.namespace.Folders.Item(i)
+                if str(root.Name).strip().lower() == str(acc_name).strip().lower():
+                    return root
+            except Exception:
+                continue
+
+        return None
+
+    def _get_root(self):
+        """Return the active root folder to use (default account root if set, else the first mailbox/root)."""
+        if self.default_root_folder:
+            return self.default_root_folder
+        # Try DefaultStore if set
+        try:
+            default_store = getattr(self.namespace, "DefaultStore", None)
+            if default_store:
+                try:
+                    root = default_store.GetRootFolder()
+                    return root
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Fallback: first available root
+        try:
+            return self.namespace.Folders.Item(1)
+        except Exception:
+            # try a small range as a last resort
+            for i in range(1, 10):
+                try:
+                    return self.namespace.Folders.Item(i)
+                except Exception:
+                    continue
+        return None
+
+    def _find_account_by_name(self, name: str):
+        """Find an Outlook Account object by SMTP address or display name (case-insensitive)."""
+        if not name:
+            return None
+        try:
+            accounts = self.namespace.Accounts
+            for acc in accounts:
+                try:
+                    if (
+                        hasattr(acc, "SmtpAddress")
+                        and str(acc.SmtpAddress).strip().lower()
+                        == str(name).strip().lower()
+                    ):
+                        return acc
+                    if (
+                        hasattr(acc, "DisplayName")
+                        and str(acc.DisplayName).strip().lower()
+                        == str(name).strip().lower()
+                    ):
+                        return acc
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
+
+    def set_default_account(self, acc_name: str):
+        """
+        Set the default account by name
+
+        Args:
+            acc_name: Account name to set as default
+
+        Returns:
+            True if successful, False otherwise
+        """
+        root = self._find_root_by_name(acc_name)
+        if not root:
+            return False
+        try:
+            # Set attributes for bridge usage
+            self.default_account_name = acc_name
+            self.default_root_folder = root
+            # Also set DefaultStore to help other COM calls that rely on it
+            with contextlib.suppress(Exception):
+                self.namespace.DefaultStore = root.Store
+            return True
+        except Exception:
+            return False
 
     def get_inbox(self):
         """Get the inbox folder"""
-        inbox = self.namespace.GetDefaultFolder(6)  # 6 = olFolderInbox
-        return inbox
+        # Prefer default account root when set
+        root = self._get_root()
+        if root:
+            try:
+                # Try case-sensitive first
+                return root.Folders["Inbox"]
+            except Exception:
+                # Try case-insensitive search across root subfolders
+                try:
+                    for f in root.Folders:
+                        if str(f.Name).strip().lower() == "inbox":
+                            return f
+                except Exception:
+                    pass
+
+        # Fallback to namespace default
+        try:
+            return self.namespace.GetDefaultFolder(6)  # 6 = olFolderInbox
+        except Exception:
+            return None
+
+    def list_folders(self, acc_name: str | None = None) -> dict[str, list[dict]]:
+        """
+        Recursively list all folders for all accounts.
+        Args:
+            acc_name: Specific account name to list folders for (optional)
+        Returns:
+            Dict with account names as keys and list of folder info dicts as values
+
+        """
+
+        def retrieve_folder_details(folder, parent_folder, depth):
+            print(f"{'  ' * depth}- {folder.Name} (Items: {folder.Items.Count})")
+            all_items = []
+            cur_folder_data = {
+                "name": folder.Name,
+                "id": folder.EntryID,
+                "parent_name": parent_folder.Name if parent_folder else None,
+                "parent_id": parent_folder.EntryID if parent_folder else None,
+                "number_of_items": folder.Items.Count,
+                "path": folder.FolderPath,
+                "depth": depth,
+                "account": parent_folder.Name if parent_folder else None,
+            }
+            all_items.append(cur_folder_data)
+            for subfolder in folder.Folders:
+                all_items.extend(retrieve_folder_details(subfolder, folder, depth + 1))
+            return all_items
+
+        final = {}
+        for i in range(1, 7):
+            try:
+                parent_folder = self.namespace.Folders.Item(i)
+                if acc_name and parent_folder.Name != acc_name:
+                    print(
+                        f"acc_name arg does not match found account: {parent_folder.Name}\n  skipping..."
+                    )
+                    continue
+                print(f"Account: {parent_folder.Name}")
+            except Exception:
+                print(f"Finished listing accounts. Total accounts: {i - 1}")
+                break  # No more accounts
+
+            final[parent_folder.Name] = retrieve_folder_details(parent_folder, None, 0)
+
+        return final
 
     def get_calendar(self):
         """Get the calendar folder"""
-        calendar = self.namespace.GetDefaultFolder(9)  # 9 = olFolderCalendar
-        return calendar
+        # Prefer default account root when set
+        root = self._get_root()
+        if root:
+            try:
+                # direct access
+                return root.Folders["Calendar"]
+            except Exception:
+                # case-insensitive search
+                try:
+                    for f in root.Folders:
+                        if str(f.Name).strip().lower() == "calendar":
+                            return f
+                except Exception:
+                    pass
+
+        # Fallback: search all accounts by name
+        try:
+            count = self.namespace.Folders.Count
+        except Exception:
+            count = None
+
+        if count and count > 0:
+            for i in range(1, count + 1):
+                try:
+                    parent_folder = self.namespace.Folders.Item(i)
+                    try:
+                        cal = parent_folder.Folders["Calendar"]
+                        return cal
+                    except Exception:
+                        # try case-insensitive
+                        for f in parent_folder.Folders:
+                            if str(f.Name).strip().lower() == "calendar":
+                                return f
+                except Exception:
+                    continue
+
+        return None
 
     def get_tasks(self):
         """Get the tasks folder"""
-        tasks = self.namespace.GetDefaultFolder(13)  # 13 = olFolderTasks
-        return tasks
+        root = self._get_root()
+        if root:
+            try:
+                return root.Folders["Tasks"]
+            except Exception:
+                try:
+                    for f in root.Folders:
+                        if str(f.Name).strip().lower() == "tasks":
+                            return f
+                except Exception:
+                    pass
+
+        try:
+            return self.namespace.GetDefaultFolder(13)  # 13 = olFolderTasks
+        except Exception:
+            return None
 
     def get_folder_by_name(self, folder_name):
         """
@@ -98,18 +331,64 @@ class OutlookBridge:
         Returns:
             Folder object or None
         """
-        try:
-            inbox = self.get_inbox()
-            # Try to get subfolder of inbox
-            folder = inbox.Folders[folder_name]
-            return folder
-        except Exception:
+        # Try default account root first
+        if not folder_name:
+            return None
+
+        root = self._get_root()
+        if root:
             try:
-                # Try to get from root
-                folder = self.namespace.Folders.Item(1).Folders[folder_name]
-                return folder
+                return root.Folders[folder_name]
             except Exception:
-                return None
+                try:
+                    for f in root.Folders:
+                        if (
+                            str(f.Name).strip().lower()
+                            == str(folder_name).strip().lower()
+                        ):
+                            return f
+                except Exception:
+                    pass
+
+        # Search across all account roots
+        try:
+            count = self.namespace.Folders.Count
+        except Exception:
+            count = None
+
+        if count and count > 0:
+            for i in range(1, count + 1):
+                try:
+                    parent = self.namespace.Folders.Item(i)
+                    try:
+                        return parent.Folders[folder_name]
+                    except Exception:
+                        # case-insensitive search in this parent
+                        try:
+                            for f in parent.Folders:
+                                if (
+                                    str(f.Name).strip().lower()
+                                    == str(folder_name).strip().lower()
+                                ):
+                                    return f
+                        except Exception:
+                            pass
+                except Exception:
+                    continue
+
+        # Last resort: try the first root's children
+        try:
+            root = self.namespace.Folders.Item(1)
+            try:
+                return root.Folders[folder_name]
+            except Exception:
+                for f in root.Folders:
+                    if str(f.Name).strip().lower() == str(folder_name).strip().lower():
+                        return f
+        except Exception:
+            pass
+
+        return None
 
     def get_item_by_id(self, entry_id):
         """
@@ -292,7 +571,33 @@ class OutlookBridge:
                 if not all_events:
                     start_date = datetime.now()
                     end_date = start_date + timedelta(days=days)
-                    if not (start >= start_date and start <= end_date):
+                    # Normalize COM/pywintypes datetimes to naive Python datetimes for comparison
+                    start_dt = None
+                    try:
+                        if isinstance(start, datetime):
+                            # drop tzinfo if present to compare with datetime.now()
+                            start_dt = datetime(
+                                start.year,
+                                start.month,
+                                start.day,
+                                start.hour,
+                                start.minute,
+                                start.second,
+                            )
+                        else:
+                            start_dt = datetime(
+                                start.Year,
+                                start.Month,
+                                start.Day,
+                                start.Hour,
+                                start.Minute,
+                                start.Second,
+                            )
+                    except Exception:
+                        # If normalization fails, skip this item
+                        continue
+
+                    if not (start_dt >= start_date and start_dt <= end_date):
                         continue
 
                 # Get attendees (safe access)
@@ -373,7 +678,27 @@ class OutlookBridge:
             Draft entry ID if saved, True if sent, False if failed
         """
         try:
-            mail = self.outlook.CreateItem(0)  # 0 = olMailItem
+            # If saving to drafts, create the mail in the default account's Drafts folder when available
+            root = self._get_root()
+            mail = None
+            if save_draft and root:
+                try:
+                    drafts = None
+                    try:
+                        drafts = root.Folders["Drafts"]
+                    except Exception:
+                        for f in root.Folders:
+                            if str(f.Name).strip().lower() == "drafts":
+                                drafts = f
+                                break
+                    if drafts:
+                        mail = drafts.Items.Add()
+                except Exception:
+                    mail = None
+
+            if mail is None:
+                mail = self.outlook.CreateItem(0)  # 0 = olMailItem
+
             mail.To = to
             mail.Subject = subject
             if html_body:
@@ -386,11 +711,37 @@ class OutlookBridge:
                 mail.BCC = bcc
 
             # Add attachments
-            # NOTE: WSL path translation handled in outlook.sh wrapper
-            # Windows Python expects Windows paths (C:\path\to\file)
             if file_paths:
                 for file_path in file_paths:
-                    mail.Attachments.Add(file_path)
+                    with contextlib.suppress(Exception):
+                        mail.Attachments.Add(file_path)
+
+            # Ensure sending uses the default account when set
+            try:
+                acc = None
+                if self.default_account_name:
+                    acc = self._find_account_by_name(self.default_account_name)
+                # If DefaultStore was set, try to find account by matching store owner
+                if not acc:
+                    try:
+                        accounts = self.namespace.Accounts
+                        for a in accounts:
+                            try:
+                                if hasattr(a, "SmtpAddress") and a.SmtpAddress in (
+                                    self.default_account_name or ""
+                                ):
+                                    acc = a
+                                    break
+                            except Exception:
+                                continue
+                    except Exception:
+                        pass
+
+                if acc:
+                    with contextlib.suppress(Exception):
+                        mail.SendUsingAccount = acc
+            except Exception:
+                pass
 
             if save_draft:
                 mail.Save()
@@ -422,6 +773,15 @@ class OutlookBridge:
                 else:
                     reply = item.Reply()
                 reply.Body = body
+                # try to enforce default send account
+                try:
+                    if self.default_account_name:
+                        acc = self._find_account_by_name(self.default_account_name)
+                        if acc:
+                            with contextlib.suppress(Exception):
+                                reply.SendUsingAccount = acc
+                except Exception:
+                    pass
                 reply.Send()
                 return True
             except Exception as e:
@@ -448,6 +808,14 @@ class OutlookBridge:
                 forward.To = to
                 if body:
                     forward.Body = body + "\n\n" + forward.Body
+                try:
+                    if self.default_account_name:
+                        acc = self._find_account_by_name(self.default_account_name)
+                        if acc:
+                            with contextlib.suppress(Exception):
+                                forward.SendUsingAccount = acc
+                except Exception:
+                    pass
                 forward.Send()
                 return True
             except Exception as e:
@@ -582,7 +950,15 @@ class OutlookBridge:
             Appointment entry ID if successful
         """
         try:
-            appointment = self.outlook.CreateItem(1)  # 1 = olAppointmentItem
+            # Prefer creating the appointment in the default account's Calendar folder
+            calendar = self.get_calendar()
+            if calendar:
+                try:
+                    appointment = calendar.Items.Add()
+                except Exception:
+                    appointment = self.outlook.CreateItem(1)  # fallback
+            else:
+                appointment = self.outlook.CreateItem(1)  # 1 = olAppointmentItem
             appointment.Subject = subject
             appointment.Start = datetime.strptime(start, "%Y-%m-%d %H:%M:%S")
             appointment.End = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
@@ -835,7 +1211,15 @@ class OutlookBridge:
             Task entry ID if successful
         """
         try:
-            task = self.outlook.CreateItem(3)  # 3 = olTaskItem
+            # Prefer creating the task in the default account's Tasks folder
+            tasks_folder = self.get_tasks()
+            if tasks_folder:
+                try:
+                    task = tasks_folder.Items.Add()
+                except Exception:
+                    task = self.outlook.CreateItem(3)
+            else:
+                task = self.outlook.CreateItem(3)  # 3 = olTaskItem
             task.Subject = subject
             task.Body = body
             if due_date:
