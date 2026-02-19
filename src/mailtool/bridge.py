@@ -521,6 +521,191 @@ class OutlookBridge:
                 return None
         return None
 
+    def get_email_parsed(self, entry_id):
+        """
+        Get structured email object using mail-parser (O(1) direct access)
+
+        Args:
+            entry_id: Outlook EntryID of the email
+
+        Returns:
+            Dictionary matching EmailParsed model structure
+        """
+        import os
+        import tempfile
+
+        try:
+            import mailparser
+        except ImportError:
+            print(
+                "Warning: mail-parser not installed, falling back to basic parsing",
+                file=sys.stderr,
+            )
+            item = self.get_item_by_id(entry_id)
+            if not item:
+                return None
+            return self._fallback_parsed_model(item)
+
+        item = self.get_item_by_id(entry_id)
+        if not item:
+            return None
+
+        # Create temp file
+        fd, temp_path = tempfile.mkstemp(suffix=".msg")
+        os.close(fd)
+
+        try:
+            # Save as MSG
+            # olMSG = 3
+            try:
+                item.SaveAs(temp_path, 3)
+            except Exception as e:
+                print(f"Error saving to .msg: {e}", file=sys.stderr)
+                return self._fallback_parsed_model(item)
+
+            # Parse
+            try:
+                mail = mailparser.parse_from_file_msg(temp_path)
+                return self._convert_to_parsed_model(mail, item)
+            except Exception as e:
+                print(f"Error parsing .msg with mail-parser: {e}", file=sys.stderr)
+                return self._fallback_parsed_model(item)
+
+        finally:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+
+    def _convert_to_parsed_model(self, mail, item):
+        """Convert mail-parser object to dict matching EmailParsed model"""
+        # mail-parser returns list of tuples for from_, to, cc, bcc
+        # mail.date is a datetime object
+
+        # Helper to convert list of tuples to expected format
+        def safe_list_tuples(val):
+            if isinstance(val, list):
+                return [tuple(x) for x in val]
+            return []
+
+        # received headers
+        received = []
+        if hasattr(mail, "received"):
+            for r in mail.received:
+                # convert to dict if it's not
+                if isinstance(r, dict):
+                    received.append(r)
+                else:
+                    try:
+                        received.append(dict(r))
+                    except Exception:
+                        pass
+
+        # attachments
+        # User said "leave out the attachment for now", so I will return metadata only or empty
+        # mail-parser attachments is list of dicts.
+        attachments = []
+        if hasattr(mail, "attachments"):
+            for att in mail.attachments:
+                # filter fields? Just keep what mail-parser gives
+                # binary payload might be large.
+                # User said "leave out the attachment for now".
+                # I'll include metadata but maybe strip payload if huge?
+                # mail-parser 'payload' is base64 string.
+                # I'll strip 'payload' key to save bandwidth as requested "leave out attachment".
+                # But keep filename, etc.
+                a_copy = att.copy()
+                if "payload" in a_copy:
+                    del a_copy["payload"]
+                attachments.append(a_copy)
+
+        return {
+            "entry_id": item.EntryID,
+            "subject": mail.subject,
+            "from": safe_list_tuples(mail.from_),
+            "to": safe_list_tuples(mail.to),
+            "cc": safe_list_tuples(mail.cc),
+            "bcc": safe_list_tuples(mail.bcc),
+            "date": mail.date.isoformat()
+            if mail.date
+            else (
+                item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                if item.ReceivedTime
+                else None
+            ),
+            "message_id": mail.message_id,
+            "headers": mail.headers,
+            "text_plain": mail.text_plain,
+            "text_html": mail.text_html,
+            "body": mail.body,
+            "attachments": attachments,
+            "received": received,
+        }
+
+    def _fallback_parsed_model(self, item):
+        """Fallback when mail-parser fails, using COM properties"""
+        sender_email = self.resolve_smtp_address(item)
+        sender_name = item.SenderName
+
+        # Parse recipients
+        to_list = []
+        cc_list = []
+        bcc_list = []
+
+        # This is a basic approximation
+        if hasattr(item, "To") and item.To:
+            # item.To is a string "Name; Name". No emails usually.
+            # Best effort: use Recipients collection if possible, but that iterates.
+            # For fallback, just putting name in tuple is okay or split string.
+            # Or just use empty list if we can't reliably get emails.
+            # I'll use the strings.
+            for name in item.To.split(";"):
+                if name.strip():
+                    to_list.append((name.strip(), ""))
+
+        if hasattr(item, "CC") and item.CC:
+            for name in item.CC.split(";"):
+                if name.strip():
+                    cc_list.append((name.strip(), ""))
+
+        received_time = (
+            item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+            if item.ReceivedTime
+            else None
+        )
+
+        # Attachments metadata (basic)
+        attachments = []
+        try:
+            if item.Attachments.Count > 0:
+                for i in range(1, item.Attachments.Count + 1):
+                    att = item.Attachments.Item(i)
+                    attachments.append({
+                        "filename": att.FileName,
+                        "size": att.Size,
+                        "content_id": self._safe_get_attr(att, "ContentID"),
+                    })
+        except Exception:
+            pass
+
+        return {
+            "entry_id": item.EntryID,
+            "subject": item.Subject,
+            "from": [(sender_name, sender_email)],
+            "to": to_list,
+            "cc": cc_list,
+            "bcc": bcc_list,
+            "date": received_time,
+            "message_id": "",  # Hard to get via COM easily
+            "headers": {},  # Empty
+            "text_plain": [item.Body],
+            "text_html": [item.HTMLBody],
+            "body": item.Body,
+            "attachments": attachments,
+            "received": [],
+        }
+
     def list_calendar_events(self, days=7, all_events=False):
         """
         List calendar events for the next N days
