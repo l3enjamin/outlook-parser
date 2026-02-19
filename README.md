@@ -30,8 +30,9 @@ This will configure the MCP server with 24 tools for email, calendar, and task m
 ## Prerequisites
 
 - Windows with Outlook (classic) installed and running
-- WSL2 with `uv` installed (`pip install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- `uv.exe` accessible from WSL2 (automatically available if installed on Windows)
+- `uv` installed (`pip install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+
+> **Note:** WSL2 is **not required**. This tool works natively on Windows. The WSL2 integration (via `outlook.sh`) is provided for users who prefer running their development tools in a containerized Linux environment while bridging to their Windows Outlook instance.
 
 ## Setup
 
@@ -78,6 +79,9 @@ mailtool calendar --days 7
 
 # Get specific email body (use entry_id from emails command)
 mailtool email --id <entry_id>
+
+# Get parsed email object (with detailed headers and structure)
+mailtool parsed-email --id <entry_id>
 ```
 
 ### As an MCP Server (for Claude Code)
@@ -155,7 +159,8 @@ This includes a Model Context Protocol (MCP) server for Claude Code integration 
 
 ### Key Features
 
-- **24 Tools** for email, calendar, and task management
+- **25 Tools** for email, calendar, and task management
+- **Structured Email Parsing** - New `parse_email` tool returns detailed objects similar to `mail-parser` (headers, body parts, metadata)
 - **7 Resources** for quick data access (inbox, calendar, tasks)
 - **Structured Output** - All tools return typed Pydantic models
 - **Type Safety** - Full type annotations for better IDE support

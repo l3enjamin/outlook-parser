@@ -133,6 +133,12 @@ def main() -> None:
     get_parser = subparsers.add_parser("email", help="Get email details")
     get_parser.add_argument("--id", required=True, help="Email entry ID")
 
+    # Parsed email command
+    parsed_parser = subparsers.add_parser(
+        "parsed-email", help="Get parsed email structure"
+    )
+    parsed_parser.add_argument("--id", required=True, help="Email entry ID")
+
     # Send email command
     send_parser = subparsers.add_parser("send", help="Send an email")
     send_parser.add_argument("--to", required=True, help="Recipient email address")
@@ -372,6 +378,14 @@ def main() -> None:
             print(json.dumps(email, indent=2))
         else:
             print("Email not found", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "parsed-email":
+        email = bridge.get_email_parsed(entry_id=args.id)
+        if email:
+            print(json.dumps(email, indent=2, default=str))
+        else:
+            print("Email not found or parsing failed", file=sys.stderr)
             sys.exit(1)
 
     elif args.command == "send":
