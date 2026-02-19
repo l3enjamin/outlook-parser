@@ -23,6 +23,7 @@ from mailtool.mcp.models import (
     CreateAppointmentResult,
     CreateTaskResult,
     EmailDetails,
+    EmailParsed,
     EmailSummary,
     FreeBusyInfo,
     OperationResult,
@@ -215,6 +216,42 @@ def get_email(entry_id: str) -> EmailDetails:
         received_time=result["received_time"],
         has_attachments=result["has_attachments"],
     )
+
+
+@mcp.tool()
+def parse_email(entry_id: str) -> EmailParsed:
+    """
+    Get richly structured email object using mail-parser logic.
+
+    This tool extracts the email as a .msg file and parses it using the
+    mail-parser library to provide detailed headers, body parts, and metadata
+    similar to the 'mail-parser' repo object structure.
+
+    Args:
+        entry_id: Outlook EntryID of the email (O(1) direct access)
+
+    Returns:
+        EmailParsed: Richly structured email object with headers, body parts, and metadata
+
+    Raises:
+        OutlookNotFoundError: If email not found
+        OutlookComError: If bridge is not initialized
+    """
+    # Get bridge from module-level state
+    bridge = _get_bridge()
+
+    # Get parsed email from bridge
+    result = bridge.get_email_parsed(entry_id)
+
+    # Check if email was found
+    if result is None:
+        logger.error(f"Email not found: {entry_id}")
+        raise OutlookNotFoundError("Email not found", entry_id=entry_id)
+
+    logger.debug(f"Retrieved parsed email: {entry_id}")
+
+    # Convert bridge result to EmailParsed model
+    return EmailParsed(**result)
 
 
 @mcp.tool()
