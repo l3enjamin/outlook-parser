@@ -1101,8 +1101,27 @@ class OutlookBridge:
 
             for i in range(item.Attachments.Count):
                 attachment = item.Attachments.Item(i + 1)  # COM is 1-indexed
-                filename = attachment.FileName
-                filepath = os.path.join(download_dir, filename)
+
+                # Security Fix: Sanitize filename to prevent path traversal
+                # Get just the filename part, handling both / and \ regardless of platform
+                raw_filename = attachment.FileName or f"attachment_{i + 1}"
+                filename = os.path.basename(raw_filename.replace("\\", "/"))
+
+                # Ensure filename is not empty or special directory markers
+                if not filename or filename in (".", ".."):
+                    filename = f"attachment_{i + 1}"
+
+                # Construct full path and ensure it's within download_dir
+                abs_download_dir = os.path.abspath(download_dir)
+                filepath = os.path.abspath(os.path.join(abs_download_dir, filename))
+
+                if not filepath.startswith(abs_download_dir):
+                    print(
+                        f"Warning: Skipping suspicious attachment filename: {raw_filename}",
+                        file=sys.stderr,
+                    )
+                    continue
+
                 attachment.SaveAsFile(filepath)
                 downloaded.append(filepath)
             return downloaded
