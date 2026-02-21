@@ -246,13 +246,13 @@ class TestEmailResources:
         resources.register_email_resources(mcp)
 
         # Call the resource function directly
-        result = resources._get_bridge().list_emails(limit=50, folder="Inbox")
+        result = resources.inbox_emails()
 
         # Verify bridge was called correctly
         mock_bridge.list_emails.assert_called_once_with(limit=50, folder="Inbox")
-        assert len(result) == 2
-        assert result[0]["entry_id"] == "email-123"
-        assert result[1]["entry_id"] == "email-456"
+        assert "Test Email" in result
+        assert "email-123" in result
+        assert "email-456" in result
 
     def test_inbox_unread_resource(self, set_bridge, mock_bridge):
         """Test inbox://unread resource"""
@@ -262,27 +262,39 @@ class TestEmailResources:
         mcp = FastMCP("test-server")
         resources.register_email_resources(mcp)
 
-        # Get all emails and filter for unread
-        all_emails = mock_bridge.list_emails(limit=50, folder="Inbox")
-        unread_emails = [e for e in all_emails if e.get("unread", False)]
+        # Setup mock for search_emails
+        mock_bridge.search_emails.return_value = [
+            {
+                "entry_id": "email-123",
+                "subject": "Test Email",
+                "sender": "test@example.com",
+                "sender_name": "Test Sender",
+                "received_time": "2025-01-19 10:00:00",
+                "unread": True,
+                "has_attachments": False,
+            }
+        ]
 
-        # Should only return the unread email
-        assert len(unread_emails) == 1
-        assert unread_emails[0]["entry_id"] == "email-123"
-        assert unread_emails[0]["unread"] is True
+        # Call the resource function directly
+        result = resources.inbox_unread()
+
+        # Verify bridge was called correctly
+        mock_bridge.search_emails.assert_called_once_with("[Unread]=True", limit=50)
+        assert "Test Email" in result
+        assert "email-123" in result
 
     def test_email_details_resource(self, set_bridge, mock_bridge):
         """Test email://{entry_id} resource"""
         entry_id = "email-123"
 
-        # Call get_email_body
-        result = mock_bridge.get_email_body(entry_id)
+        # Call the resource function directly
+        result = resources.email_details(entry_id)
 
         # Verify bridge was called correctly
         mock_bridge.get_email_body.assert_called_once_with(entry_id)
-        assert result["entry_id"] == entry_id
-        assert result["subject"] == "Test Email"
-        assert result["body"] == "Test body content"
+        assert "Test Email" in result
+        assert "email-123" in result
+        assert "Test body content" in result
 
     def test_email_details_not_found(self, set_bridge, mock_bridge):
         """Test email://{entry_id} resource with non-existent entry ID"""
@@ -290,38 +302,32 @@ class TestEmailResources:
 
         entry_id = "nonexistent-email"
 
-        # Call get_email_body
-        result = mock_bridge.get_email_body(entry_id)
+        # Call the resource function directly
+        result = resources.email_details(entry_id)
 
-        # Should return None
-        assert result is None
+        # Should return error message
+        assert "Email not found" in result
+        assert entry_id in result
 
     def test_inbox_emails_empty(self, set_bridge, mock_bridge):
         """Test inbox://emails resource with no emails"""
         mock_bridge.list_emails.return_value = []
 
-        result = mock_bridge.list_emails(limit=50, folder="Inbox")
+        # Call the resource function directly
+        result = resources.inbox_emails()
 
-        assert result == []
+        assert "No emails found" in result
 
     def test_inbox_unread_empty(self, set_bridge, mock_bridge):
         """Test inbox://unread resource with no unread emails"""
-        mock_bridge.list_emails.return_value = [
-            {
-                "entry_id": "email-456",
-                "subject": "Read Email",
-                "sender": "read@example.com",
-                "sender_name": "Read Sender",
-                "received_time": "2025-01-19 09:00:00",
-                "unread": False,
-                "has_attachments": True,
-            }
-        ]
+        mock_bridge.search_emails.return_value = []
 
-        all_emails = mock_bridge.list_emails(limit=50, folder="Inbox")
-        unread_emails = [e for e in all_emails if e.get("unread", False)]
+        # Call the resource function directly
+        result = resources.inbox_unread()
 
-        assert len(unread_emails) == 0
+        # Verify bridge was called correctly
+        mock_bridge.search_emails.assert_called_once_with("[Unread]=True", limit=50)
+        assert "No unread emails" in result
 
 
 # =============================================================================
@@ -340,14 +346,13 @@ class TestCalendarResources:
         mcp = FastMCP("test-server")
         resources.register_calendar_resources(mcp)
 
-        # Call the resource function (days=1)
-        result = mock_bridge.list_calendar_events(days=1)
+        # Call the resource function directly
+        result = resources.calendar_today()
 
         # Verify bridge was called correctly
         mock_bridge.list_calendar_events.assert_called_with(days=1)
-        assert len(result) == 1
-        assert result[0]["entry_id"] == "apt-123"
-        assert result[0]["subject"] == "Test Meeting"
+        assert "Test Meeting" in result
+        assert "apt-123" in result
 
     def test_calendar_week_resource(self, set_bridge, mock_bridge):
         """Test calendar://week resource"""
@@ -357,29 +362,31 @@ class TestCalendarResources:
         mcp = FastMCP("test-server")
         resources.register_calendar_resources(mcp)
 
-        # Call the resource function (days=7)
-        result = mock_bridge.list_calendar_events(days=7)
+        # Call the resource function directly
+        result = resources.calendar_week()
 
         # Verify bridge was called correctly
         mock_bridge.list_calendar_events.assert_called_with(days=7)
-        assert len(result) == 1
-        assert result[0]["entry_id"] == "apt-123"
+        assert "Test Meeting" in result
+        assert "apt-123" in result
 
     def test_calendar_today_empty(self, set_bridge, mock_bridge):
         """Test calendar://today resource with no events"""
         mock_bridge.list_calendar_events.return_value = []
 
-        result = mock_bridge.list_calendar_events(days=1)
+        # Call the resource function directly
+        result = resources.calendar_today()
 
-        assert result == []
+        assert "No calendar events" in result
 
     def test_calendar_week_empty(self, set_bridge, mock_bridge):
         """Test calendar://week resource with no events"""
         mock_bridge.list_calendar_events.return_value = []
 
-        result = mock_bridge.list_calendar_events(days=7)
+        # Call the resource function directly
+        result = resources.calendar_week()
 
-        assert result == []
+        assert "No calendar events" in result
 
 
 # =============================================================================
@@ -398,9 +405,13 @@ class TestTaskResources:
         mcp = FastMCP("test-server")
         resources.register_task_resources(mcp)
 
+        # Call the resource function directly
+        result = resources.tasks_active()
+
         # Verify bridge was called correctly
-        mock_bridge.list_tasks(include_completed=False)
         mock_bridge.list_tasks.assert_called_with(include_completed=False)
+        assert "Active Task" in result
+        assert "task-123" in result
 
     def test_tasks_all_resource(self, set_bridge, mock_bridge):
         """Test tasks://all resource"""
@@ -410,28 +421,31 @@ class TestTaskResources:
         mcp = FastMCP("test-server")
         resources.register_task_resources(mcp)
 
-        # Call the resource function (include_completed=True)
-        result = mock_bridge.list_tasks(include_completed=True)
+        # Call the resource function directly
+        result = resources.tasks_all()
 
         # Verify bridge was called correctly
         mock_bridge.list_tasks.assert_called_with(include_completed=True)
-        assert len(result) == 2  # Both active and completed tasks
+        assert "Active Task" in result
+        assert "Completed Task" in result
 
     def test_tasks_active_empty(self, set_bridge, mock_bridge):
         """Test tasks://active resource with no active tasks"""
         mock_bridge.list_tasks.return_value = []
 
-        result = mock_bridge.list_tasks(include_completed=False)
+        # Call the resource function directly
+        result = resources.tasks_active()
 
-        assert result == []
+        assert "No active tasks" in result
 
     def test_tasks_all_empty(self, set_bridge, mock_bridge):
         """Test tasks://all resource with no tasks"""
         mock_bridge.list_tasks.return_value = []
 
-        result = mock_bridge.list_tasks(include_completed=True)
+        # Call the resource function directly
+        result = resources.tasks_all()
 
-        assert result == []
+        assert "No tasks found" in result
 
 
 # =============================================================================

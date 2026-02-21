@@ -154,6 +154,116 @@ def _email_details_to_dict(email: EmailDetails) -> dict:
     }
 
 
+def inbox_emails() -> str:
+    """Get recent emails from inbox.
+
+    Returns:
+        Formatted text with email summaries
+    """
+    bridge = _get_bridge()
+
+    # Get emails from bridge
+    emails_data = bridge.list_emails(limit=50, folder="Inbox")
+
+    # Convert to EmailSummary models
+    emails = [
+        EmailSummary(
+            entry_id=email["entry_id"],
+            subject=email["subject"],
+            sender=email["sender"],
+            sender_name=email["sender_name"],
+            received_time=email["received_time"],
+            unread=email["unread"],
+            has_attachments=email["has_attachments"],
+        )
+        for email in emails_data
+    ]
+
+    # Format as text
+    if not emails:
+        return "No emails found in inbox"
+
+    lines = [f"Inbox Emails ({len(emails)} items)", ""]
+    for email in emails:
+        lines.append(_format_email_summary(email))
+        lines.append("-" * 60)
+
+    return "\n".join(lines)
+
+
+def inbox_unread() -> str:
+    """Get unread emails from inbox.
+
+    Returns:
+        Formatted text with unread email summaries
+    """
+    bridge = _get_bridge()
+
+    # Fetch only unread emails directly from bridge
+    unread_emails_data = bridge.search_emails("[Unread]=True", limit=50)
+
+    # Convert to EmailSummary models
+    emails = [
+        EmailSummary(
+            entry_id=email["entry_id"],
+            subject=email["subject"],
+            sender=email["sender"],
+            sender_name=email["sender_name"],
+            received_time=email["received_time"],
+            unread=email["unread"],
+            has_attachments=email["has_attachments"],
+        )
+        for email in unread_emails_data
+    ]
+
+    # Format as text
+    if not emails:
+        return "No unread emails in inbox"
+
+    lines = [f"Unread Emails ({len(emails)} items)", ""]
+    for email in emails:
+        lines.append(_format_email_summary(email))
+        lines.append("-" * 60)
+
+    return "\n".join(lines)
+
+
+def email_details(entry_id: str) -> str:
+    """Get full email details by entry ID.
+
+    Args:
+        entry_id: Outlook EntryID of the email
+
+    Returns:
+        Formatted text with full email details including body
+
+    Raises:
+        OutlookComError: If bridge is not initialized
+    """
+    bridge = _get_bridge()
+
+    # Get email details from bridge
+    email_data = bridge.get_email_body(entry_id)
+
+    if email_data is None:
+        return f"Email not found: {entry_id}"
+
+    # Convert to EmailDetails model
+    email = EmailDetails(
+        entry_id=email_data["entry_id"],
+        subject=email_data["subject"],
+        sender=email_data["sender"],
+        sender_name=email_data["sender_name"],
+        body=email_data["body"],
+        html_body=email_data["html_body"],
+        received_time=email_data["received_time"],
+        has_attachments=email_data["has_attachments"],
+    )
+
+    # Format as text
+    return _format_email_details(email)
+
+
 def register_email_resources(mcp: FastMCP) -> None:
     """Register all email resources with the FastMCP server.
 
@@ -165,136 +275,26 @@ def register_email_resources(mcp: FastMCP) -> None:
     2. inbox://unread - Lists unread emails (limit 50)
     3. email://{entry_id} - Gets full email details (template resource)
     """
-
-    @mcp.resource(
+    mcp.resource(
         uri="inbox://emails",
         name="inbox_emails",
         title="Inbox Emails",
         description="List recent emails from the inbox (max 50)",
-    )
-    def inbox_emails() -> str:
-        """Get recent emails from inbox.
+    )(inbox_emails)
 
-        Returns:
-            Formatted text with email summaries
-        """
-        bridge = _get_bridge()
-
-        # Get emails from bridge
-        emails_data = bridge.list_emails(limit=50, folder="Inbox")
-
-        # Convert to EmailSummary models
-        emails = [
-            EmailSummary(
-                entry_id=email["entry_id"],
-                subject=email["subject"],
-                sender=email["sender"],
-                sender_name=email["sender_name"],
-                received_time=email["received_time"],
-                unread=email["unread"],
-                has_attachments=email["has_attachments"],
-            )
-            for email in emails_data
-        ]
-
-        # Format as text
-        if not emails:
-            return "No emails found in inbox"
-
-        lines = [f"Inbox Emails ({len(emails)} items)", ""]
-        for email in emails:
-            lines.append(_format_email_summary(email))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
-
-    @mcp.resource(
+    mcp.resource(
         uri="inbox://unread",
         name="inbox_unread",
         title="Unread Inbox Emails",
         description="List unread emails from the inbox (max 50)",
-    )
-    def inbox_unread() -> str:
-        """Get unread emails from inbox.
+    )(inbox_unread)
 
-        Returns:
-            Formatted text with unread email summaries
-        """
-        bridge = _get_bridge()
-
-        # Get all emails from bridge
-        emails_data = bridge.list_emails(limit=50, folder="Inbox")
-
-        # Filter to only unread emails
-        unread_emails_data = [
-            email for email in emails_data if email.get("unread", False)
-        ]
-
-        # Convert to EmailSummary models
-        emails = [
-            EmailSummary(
-                entry_id=email["entry_id"],
-                subject=email["subject"],
-                sender=email["sender"],
-                sender_name=email["sender_name"],
-                received_time=email["received_time"],
-                unread=email["unread"],
-                has_attachments=email["has_attachments"],
-            )
-            for email in unread_emails_data
-        ]
-
-        # Format as text
-        if not emails:
-            return "No unread emails in inbox"
-
-        lines = [f"Unread Emails ({len(emails)} items)", ""]
-        for email in emails:
-            lines.append(_format_email_summary(email))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
-
-    @mcp.resource(
+    mcp.resource(
         uri="email://{entry_id}",
         name="email_details",
         title="Email Details",
         description="Get full email details by entry ID",
-    )
-    def email_details(entry_id: str) -> str:
-        """Get full email details by entry ID.
-
-        Args:
-            entry_id: Outlook EntryID of the email
-
-        Returns:
-            Formatted text with full email details including body
-
-        Raises:
-            OutlookComError: If bridge is not initialized
-        """
-        bridge = _get_bridge()
-
-        # Get email details from bridge
-        email_data = bridge.get_email_body(entry_id)
-
-        if email_data is None:
-            return f"Email not found: {entry_id}"
-
-        # Convert to EmailDetails model
-        email = EmailDetails(
-            entry_id=email_data["entry_id"],
-            subject=email_data["subject"],
-            sender=email_data["sender"],
-            sender_name=email_data["sender_name"],
-            body=email_data["body"],
-            html_body=email_data["html_body"],
-            received_time=email_data["received_time"],
-            has_attachments=email_data["has_attachments"],
-        )
-
-        # Format as text
-        return _format_email_details(email)
+    )(email_details)
 
 
 def _format_appointment_summary(appt: AppointmentSummary) -> str:
@@ -346,6 +346,90 @@ Body:
 """
 
 
+def calendar_today() -> str:
+    """Get today's calendar events.
+
+    Returns:
+        Formatted text with appointment summaries
+    """
+    bridge = _get_bridge()
+
+    # Get today's events from bridge (days=1)
+    events_data = bridge.list_calendar_events(days=1)
+
+    # Convert to AppointmentSummary models
+    events = [
+        AppointmentSummary(
+            entry_id=event["entry_id"],
+            subject=event["subject"],
+            start=event["start"],
+            end=event["end"],
+            location=event["location"],
+            organizer=event["organizer"],
+            all_day=event["all_day"],
+            required_attendees=event["required_attendees"],
+            optional_attendees=event["optional_attendees"],
+            response_status=event["response_status"],
+            meeting_status=event["meeting_status"],
+            response_requested=event["response_requested"],
+        )
+        for event in events_data
+    ]
+
+    # Format as text
+    if not events:
+        return "No calendar events for today"
+
+    lines = [f"Today's Calendar ({len(events)} events)", ""]
+    for event in events:
+        lines.append(_format_appointment_summary(event))
+        lines.append("-" * 60)
+
+    return "\n".join(lines)
+
+
+def calendar_week() -> str:
+    """Get calendar events for the next 7 days.
+
+    Returns:
+        Formatted text with appointment summaries
+    """
+    bridge = _get_bridge()
+
+    # Get this week's events from bridge (days=7)
+    events_data = bridge.list_calendar_events(days=7)
+
+    # Convert to AppointmentSummary models
+    events = [
+        AppointmentSummary(
+            entry_id=event["entry_id"],
+            subject=event["subject"],
+            start=event["start"],
+            end=event["end"],
+            location=event["location"],
+            organizer=event["organizer"],
+            all_day=event["all_day"],
+            required_attendees=event["required_attendees"],
+            optional_attendees=event["optional_attendees"],
+            response_status=event["response_status"],
+            meeting_status=event["meeting_status"],
+            response_requested=event["response_requested"],
+        )
+        for event in events_data
+    ]
+
+    # Format as text
+    if not events:
+        return "No calendar events for the next 7 days"
+
+    lines = [f"Week's Calendar ({len(events)} events)", ""]
+    for event in events:
+        lines.append(_format_appointment_summary(event))
+        lines.append("-" * 60)
+
+    return "\n".join(lines)
+
+
 def register_calendar_resources(mcp: FastMCP) -> None:
     """Register all calendar resources with the FastMCP server.
 
@@ -356,100 +440,19 @@ def register_calendar_resources(mcp: FastMCP) -> None:
     1. calendar://today - Lists today's calendar events
     2. calendar://week - Lists calendar events for the next 7 days
     """
-
-    @mcp.resource(
+    mcp.resource(
         uri="calendar://today",
         name="calendar_today",
         title="Today's Calendar",
         description="List calendar events for today",
-    )
-    def calendar_today() -> str:
-        """Get today's calendar events.
+    )(calendar_today)
 
-        Returns:
-            Formatted text with appointment summaries
-        """
-        bridge = _get_bridge()
-
-        # Get today's events from bridge (days=1)
-        events_data = bridge.list_calendar_events(days=1)
-
-        # Convert to AppointmentSummary models
-        events = [
-            AppointmentSummary(
-                entry_id=event["entry_id"],
-                subject=event["subject"],
-                start=event["start"],
-                end=event["end"],
-                location=event["location"],
-                organizer=event["organizer"],
-                all_day=event["all_day"],
-                required_attendees=event["required_attendees"],
-                optional_attendees=event["optional_attendees"],
-                response_status=event["response_status"],
-                meeting_status=event["meeting_status"],
-                response_requested=event["response_requested"],
-            )
-            for event in events_data
-        ]
-
-        # Format as text
-        if not events:
-            return "No calendar events for today"
-
-        lines = [f"Today's Calendar ({len(events)} events)", ""]
-        for event in events:
-            lines.append(_format_appointment_summary(event))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
-
-    @mcp.resource(
+    mcp.resource(
         uri="calendar://week",
         name="calendar_week",
         title="Week's Calendar",
         description="List calendar events for the next 7 days",
-    )
-    def calendar_week() -> str:
-        """Get calendar events for the next 7 days.
-
-        Returns:
-            Formatted text with appointment summaries
-        """
-        bridge = _get_bridge()
-
-        # Get this week's events from bridge (days=7)
-        events_data = bridge.list_calendar_events(days=7)
-
-        # Convert to AppointmentSummary models
-        events = [
-            AppointmentSummary(
-                entry_id=event["entry_id"],
-                subject=event["subject"],
-                start=event["start"],
-                end=event["end"],
-                location=event["location"],
-                organizer=event["organizer"],
-                all_day=event["all_day"],
-                required_attendees=event["required_attendees"],
-                optional_attendees=event["optional_attendees"],
-                response_status=event["response_status"],
-                meeting_status=event["meeting_status"],
-                response_requested=event["response_requested"],
-            )
-            for event in events_data
-        ]
-
-        # Format as text
-        if not events:
-            return "No calendar events for the next 7 days"
-
-        lines = [f"Week's Calendar ({len(events)} events)", ""]
-        for event in events:
-            lines.append(_format_appointment_summary(event))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
+    )(calendar_week)
 
 
 def _format_task_summary(task: TaskSummary) -> str:
@@ -492,6 +495,82 @@ Entry ID: {task.entry_id}
 """
 
 
+def tasks_active() -> str:
+    """Get active (incomplete) tasks.
+
+    Returns:
+        Formatted text with task summaries
+    """
+    bridge = _get_bridge()
+
+    # Get active tasks from bridge (include_completed=False)
+    tasks_data = bridge.list_tasks(include_completed=False)
+
+    # Convert to TaskSummary models
+    tasks = [
+        TaskSummary(
+            entry_id=task["entry_id"],
+            subject=task["subject"],
+            body=task["body"],
+            due_date=task["due_date"],
+            status=task["status"],
+            priority=task["priority"],
+            complete=task["complete"],
+            percent_complete=task["percent_complete"],
+        )
+        for task in tasks_data
+    ]
+
+    # Format as text
+    if not tasks:
+        return "No active tasks"
+
+    lines = [f"Active Tasks ({len(tasks)} items)", ""]
+    for task in tasks:
+        lines.append(_format_task_summary(task))
+        lines.append("-" * 60)
+
+    return "\n".join(lines)
+
+
+def tasks_all() -> str:
+    """Get all tasks (including completed).
+
+    Returns:
+        Formatted text with task summaries
+    """
+    bridge = _get_bridge()
+
+    # Get all tasks from bridge (include_completed=True)
+    tasks_data = bridge.list_tasks(include_completed=True)
+
+    # Convert to TaskSummary models
+    tasks = [
+        TaskSummary(
+            entry_id=task["entry_id"],
+            subject=task["subject"],
+            body=task["body"],
+            due_date=task["due_date"],
+            status=task["status"],
+            priority=task["priority"],
+            complete=task["complete"],
+            percent_complete=task["percent_complete"],
+        )
+        for task in tasks_data
+    ]
+
+    # Format as text
+    if not tasks:
+        return "No tasks found"
+
+    lines = [f"All Tasks ({len(tasks)} items)", ""]
+    for task in tasks:
+        lines.append(_format_task_summary(task))
+        lines.append("-" * 60)
+
+    return "\n".join(lines)
+
+
 def register_task_resources(mcp: FastMCP) -> None:
     """Register all task resources with the FastMCP server.
 
@@ -502,89 +581,16 @@ def register_task_resources(mcp: FastMCP) -> None:
     1. tasks://active - Lists active (incomplete) tasks
     2. tasks://all - Lists all tasks (including completed)
     """
-
-    @mcp.resource(
+    mcp.resource(
         uri="tasks://active",
         name="tasks_active",
         title="Active Tasks",
         description="List active (incomplete) tasks",
-    )
-    def tasks_active() -> str:
-        """Get active (incomplete) tasks.
+    )(tasks_active)
 
-        Returns:
-            Formatted text with task summaries
-        """
-        bridge = _get_bridge()
-
-        # Get active tasks from bridge (include_completed=False)
-        tasks_data = bridge.list_tasks(include_completed=False)
-
-        # Convert to TaskSummary models
-        tasks = [
-            TaskSummary(
-                entry_id=task["entry_id"],
-                subject=task["subject"],
-                body=task["body"],
-                due_date=task["due_date"],
-                status=task["status"],
-                priority=task["priority"],
-                complete=task["complete"],
-                percent_complete=task["percent_complete"],
-            )
-            for task in tasks_data
-        ]
-
-        # Format as text
-        if not tasks:
-            return "No active tasks"
-
-        lines = [f"Active Tasks ({len(tasks)} items)", ""]
-        for task in tasks:
-            lines.append(_format_task_summary(task))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
-
-    @mcp.resource(
+    mcp.resource(
         uri="tasks://all",
         name="tasks_all",
         title="All Tasks",
         description="List all tasks (including completed)",
-    )
-    def tasks_all() -> str:
-        """Get all tasks (including completed).
-
-        Returns:
-            Formatted text with task summaries
-        """
-        bridge = _get_bridge()
-
-        # Get all tasks from bridge (include_completed=True)
-        tasks_data = bridge.list_tasks(include_completed=True)
-
-        # Convert to TaskSummary models
-        tasks = [
-            TaskSummary(
-                entry_id=task["entry_id"],
-                subject=task["subject"],
-                body=task["body"],
-                due_date=task["due_date"],
-                status=task["status"],
-                priority=task["priority"],
-                complete=task["complete"],
-                percent_complete=task["percent_complete"],
-            )
-            for task in tasks_data
-        ]
-
-        # Format as text
-        if not tasks:
-            return "No tasks found"
-
-        lines = [f"All Tasks ({len(tasks)} items)", ""]
-        for task in tasks:
-            lines.append(_format_task_summary(task))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
+    )(tasks_all)
