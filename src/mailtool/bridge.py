@@ -838,6 +838,75 @@ class OutlookBridge:
 
         return events
 
+    def _create_mail_item(self, save_draft=False):
+        """
+        Create a new mail item, optionally in the Drafts folder
+
+        Args:
+            save_draft: If True, attempt to create in the Drafts folder
+
+        Returns:
+            Outlook MailItem
+        """
+        if save_draft:
+            drafts = self.get_folder_by_name("Drafts")
+            if drafts:
+                try:
+                    return drafts.Items.Add()
+                except Exception:
+                    pass
+
+        return self.outlook.CreateItem(0)  # 0 = olMailItem
+
+    def _add_attachments(self, mail_item, file_paths):
+        """
+        Add attachments to a mail item
+
+        Args:
+            mail_item: Outlook MailItem
+            file_paths: List of file paths to attach
+        """
+        if not file_paths:
+            return
+
+        for file_path in file_paths:
+            with contextlib.suppress(Exception):
+                mail_item.Attachments.Add(file_path)
+
+    def _set_sender_account(self, mail_item):
+        """
+        Set the sender account for a mail item based on the default account
+
+        Args:
+            mail_item: Outlook MailItem
+        """
+        try:
+            acc = None
+            if self.default_account_name:
+                acc = self._find_account_by_name(self.default_account_name)
+
+            # If DefaultStore was set, try to find account by matching store owner
+            if not acc:
+                try:
+                    accounts = self.namespace.Accounts
+                    for a in accounts:
+                        try:
+                            if hasattr(a, "SmtpAddress") and a.SmtpAddress in (
+                                self.default_account_name or ""
+                            ):
+                                acc = a
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+            if acc:
+                with contextlib.suppress(Exception):
+                    mail_item.SendUsingAccount = acc
+        except Exception:
+            pass
+
     def send_email(
         self,
         to,
@@ -866,26 +935,7 @@ class OutlookBridge:
             Draft entry ID if saved, True if sent, False if failed
         """
         try:
-            # If saving to drafts, create the mail in the default account's Drafts folder when available
-            root = self._get_root()
-            mail = None
-            if save_draft and root:
-                try:
-                    drafts = None
-                    try:
-                        drafts = root.Folders["Drafts"]
-                    except Exception:
-                        for f in root.Folders:
-                            if str(f.Name).strip().lower() == "drafts":
-                                drafts = f
-                                break
-                    if drafts:
-                        mail = drafts.Items.Add()
-                except Exception:
-                    mail = None
-
-            if mail is None:
-                mail = self.outlook.CreateItem(0)  # 0 = olMailItem
+            mail = self._create_mail_item(save_draft=save_draft)
 
             mail.To = to
             mail.Subject = subject
@@ -899,37 +949,10 @@ class OutlookBridge:
                 mail.BCC = bcc
 
             # Add attachments
-            if file_paths:
-                for file_path in file_paths:
-                    with contextlib.suppress(Exception):
-                        mail.Attachments.Add(file_path)
+            self._add_attachments(mail, file_paths)
 
             # Ensure sending uses the default account when set
-            try:
-                acc = None
-                if self.default_account_name:
-                    acc = self._find_account_by_name(self.default_account_name)
-                # If DefaultStore was set, try to find account by matching store owner
-                if not acc:
-                    try:
-                        accounts = self.namespace.Accounts
-                        for a in accounts:
-                            try:
-                                if hasattr(a, "SmtpAddress") and a.SmtpAddress in (
-                                    self.default_account_name or ""
-                                ):
-                                    acc = a
-                                    break
-                            except Exception:
-                                continue
-                    except Exception:
-                        pass
-
-                if acc:
-                    with contextlib.suppress(Exception):
-                        mail.SendUsingAccount = acc
-            except Exception:
-                pass
+            self._set_sender_account(mail)
 
             if save_draft:
                 mail.Save()
