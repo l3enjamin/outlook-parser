@@ -1365,6 +1365,12 @@ class OutlookBridge:
         items = tasks_folder.Items
 
         tasks = []
+
+        # Optimization: Filter on server side if possible
+        if not include_completed:
+            with contextlib.suppress(Exception):
+                items = items.Restrict("[Complete] = False")
+
         for item in items:
             try:
                 # Skip completed tasks unless include_completed is True
