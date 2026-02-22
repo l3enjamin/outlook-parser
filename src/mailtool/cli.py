@@ -138,6 +138,11 @@ def main() -> None:
         "parsed-email", help="Get parsed email structure"
     )
     parsed_parser.add_argument("--id", required=True, help="Email entry ID")
+    parsed_parser.add_argument(
+        "--remove-quoted",
+        action="store_true",
+        help="Attempt to strip quoted text and replies",
+    )
 
     # Send email command
     send_parser = subparsers.add_parser("send", help="Send an email")
@@ -381,7 +386,9 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "parsed-email":
-        email = bridge.get_email_parsed(entry_id=args.id)
+        email = bridge.get_email_parsed(
+            entry_id=args.id, remove_quoted=args.remove_quoted
+        )
         if email:
             print(json.dumps(email, indent=2, default=str))
         else:

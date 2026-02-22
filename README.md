@@ -82,6 +82,9 @@ mailtool email --id <entry_id>
 
 # Get parsed email object (with detailed headers and structure)
 mailtool parsed-email --id <entry_id>
+
+# Get parsed email with quoted replies removed (extract latest reply only)
+mailtool parsed-email --id <entry_id> --remove-quoted
 ```
 
 ### As an MCP Server (for Claude Code)

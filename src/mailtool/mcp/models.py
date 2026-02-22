@@ -81,6 +81,10 @@ class EmailParsed(BaseModel):
     received: list[dict[str, Any]] = Field(
         default=[], description="Parsed received headers (hops)"
     )
+    latest_reply: str | None = Field(
+        default=None,
+        description="Extracted latest reply content (if remove_quoted=True)",
+    )
 
 
 class SendEmailResult(BaseModel):

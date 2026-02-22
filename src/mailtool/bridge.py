@@ -521,12 +521,13 @@ class OutlookBridge:
                 return None
         return None
 
-    def get_email_parsed(self, entry_id):
+    def get_email_parsed(self, entry_id, remove_quoted=False):
         """
         Get structured email object using mail-parser (O(1) direct access)
 
         Args:
             entry_id: Outlook EntryID of the email
+            remove_quoted: If True, strip quoted text/replies to get latest content
 
         Returns:
             Dictionary matching EmailParsed model structure
@@ -544,7 +545,7 @@ class OutlookBridge:
             item = self.get_item_by_id(entry_id)
             if not item:
                 return None
-            return self._fallback_parsed_model(item)
+            return self._fallback_parsed_model(item, remove_quoted)
 
         item = self.get_item_by_id(entry_id)
         if not item:
@@ -561,15 +562,15 @@ class OutlookBridge:
                 item.SaveAs(temp_path, 3)
             except Exception as e:
                 print(f"Error saving to .msg: {e}", file=sys.stderr)
-                return self._fallback_parsed_model(item)
+                return self._fallback_parsed_model(item, remove_quoted)
 
             # Parse
             try:
                 mail = mailparser.parse_from_file_msg(temp_path)
-                return self._convert_to_parsed_model(mail, item)
+                return self._convert_to_parsed_model(mail, item, remove_quoted)
             except Exception as e:
                 print(f"Error parsing .msg with mail-parser: {e}", file=sys.stderr)
-                return self._fallback_parsed_model(item)
+                return self._fallback_parsed_model(item, remove_quoted)
 
         finally:
             if os.path.exists(temp_path):
@@ -578,7 +579,27 @@ class OutlookBridge:
                 except Exception:
                     pass
 
-    def _convert_to_parsed_model(self, mail, item):
+    def _extract_latest_reply(self, text_body):
+        """Extract latest reply using mail-parser-reply"""
+        if not text_body:
+            return None
+        try:
+            from mailparser_reply import EmailReplyParser
+
+            parsed = EmailReplyParser.read(text_body)
+            # return the latest reply text
+            return parsed.latest_reply
+        except ImportError:
+            print(
+                "Warning: mail-parser-reply not installed, skipping reply extraction",
+                file=sys.stderr,
+            )
+            return None
+        except Exception as e:
+            print(f"Error extracting reply: {e}", file=sys.stderr)
+            return None
+
+    def _convert_to_parsed_model(self, mail, item, remove_quoted=False):
         """Convert mail-parser object to dict matching EmailParsed model"""
         # mail-parser returns list of tuples for from_, to, cc, bcc
         # mail.date is a datetime object
@@ -620,6 +641,10 @@ class OutlookBridge:
                     del a_copy["payload"]
                 attachments.append(a_copy)
 
+        latest_reply = None
+        if remove_quoted:
+            latest_reply = self._extract_latest_reply(mail.body)
+
         return {
             "entry_id": item.EntryID,
             "subject": mail.subject,
@@ -641,9 +666,10 @@ class OutlookBridge:
             "body": mail.body,
             "attachments": attachments,
             "received": received,
+            "latest_reply": latest_reply,
         }
 
-    def _fallback_parsed_model(self, item):
+    def _fallback_parsed_model(self, item, remove_quoted=False):
         """Fallback when mail-parser fails, using COM properties"""
         sender_email = self.resolve_smtp_address(item)
         sender_name = item.SenderName
@@ -689,6 +715,10 @@ class OutlookBridge:
         except Exception:
             pass
 
+        latest_reply = None
+        if remove_quoted:
+            latest_reply = self._extract_latest_reply(item.Body)
+
         return {
             "entry_id": item.EntryID,
             "subject": item.Subject,
@@ -704,6 +734,7 @@ class OutlookBridge:
             "body": item.Body,
             "attachments": attachments,
             "received": [],
+            "latest_reply": latest_reply,
         }
 
     def list_calendar_events(self, days=7, all_events=False):
