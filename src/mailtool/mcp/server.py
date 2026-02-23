@@ -64,6 +64,64 @@ register_task_resources(mcp)
 _bridge: "OutlookBridge | None" = None
 
 
+# Constants for read-only mode
+READ_ONLY_TOOLS = {
+    "list_emails",
+    "get_email",
+    "search_emails",
+    "search_emails_by_sender",
+}
+
+READ_ONLY_RESOURCES = {
+    "inbox://emails",
+}
+
+READ_ONLY_RESOURCE_TEMPLATES = {
+    "email://{entry_id}",
+}
+
+
+def configure_read_only_mode(mcp_instance: FastMCP) -> None:
+    """Configure the MCP server for read-only mode (search and read emails only).
+
+    Removes all tools and resources except those explicitly allowed for searching
+    and reading emails. This removes ability to send/reply/forward emails,
+    manage calendar, or manage tasks.
+    """
+    logger.info("Configuring read-only mode (search and read emails only)")
+
+    # Filter tools
+    # Access private _tool_manager._tools dict keys to iterate
+    # We use list() to create a copy of keys since we modify the dict
+    tool_manager = mcp_instance._tool_manager
+    registered_tools = list(tool_manager._tools.keys())
+
+    for tool_name in registered_tools:
+        if tool_name not in READ_ONLY_TOOLS:
+            logger.info(f"Removing tool in read-only mode: {tool_name}")
+            mcp_instance.remove_tool(tool_name)
+
+    # Filter resources
+    # Access private _resource_manager._resources dict
+    # There is no public remove_resource API in FastMCP currently
+    resource_manager = mcp_instance._resource_manager
+    registered_resources = list(resource_manager._resources.keys())
+
+    for resource_uri in registered_resources:
+        if resource_uri not in READ_ONLY_RESOURCES:
+             logger.info(f"Removing resource in read-only mode: {resource_uri}")
+             del resource_manager._resources[resource_uri]
+
+    # Filter resource templates
+    # Access private _resource_manager._templates dict
+    registered_templates = list(resource_manager._templates.keys())
+
+    for template_uri in registered_templates:
+        if template_uri not in READ_ONLY_RESOURCE_TEMPLATES:
+            logger.info(f"Removing resource template in read-only mode: {template_uri}")
+            del resource_manager._templates[template_uri]
+
+
 def _get_bridge():
     """Get the current bridge instance
 
@@ -1197,9 +1255,18 @@ def main(default_account: str | None = None):
             dest="account",
             help="Default account name or email address for Outlook operations",
         )
+        parser.add_argument(
+            "--search-read-only",
+            action="store_true",
+            help="Restrict tools to search and read emails only (no modification, no calendar/tasks)",
+        )
 
         args = parser.parse_args()
         default_account = args.account
+
+        # Apply read-only mode if requested
+        if args.search_read_only:
+            configure_read_only_mode(mcp)
 
     # Set the global default account that the lifespan will read
     _default_account = default_account

@@ -277,44 +277,9 @@ def register_email_resources(mcp: FastMCP) -> None:
         name="inbox_emails",
         title="Inbox Emails",
         description="List recent emails from the inbox (max 50)",
-    )
-    def inbox_emails() -> str:
-        """Get recent emails from inbox.
+    )(inbox_emails)
 
-        Returns:
-            Formatted text with email summaries
-        """
-        bridge = _get_bridge()
-
-        # Get emails from bridge
-        emails_data = bridge.list_emails(limit=50, folder="Inbox")
-
-        # Convert to EmailSummary models
-        emails = [
-            EmailSummary(
-                entry_id=email["entry_id"],
-                subject=email["subject"],
-                sender=email["sender"],
-                sender_name=email["sender_name"],
-                received_time=email["received_time"],
-                unread=email["unread"],
-                has_attachments=email["has_attachments"],
-            )
-            for email in emails_data
-        ]
-
-        # Format as text
-        if not emails:
-            return "No emails found in inbox"
-
-        lines = [f"Inbox Emails ({len(emails)} items)", ""]
-        for email in emails:
-            lines.append(_format_email_summary(email))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
-
-    @mcp.resource(
+    mcp.resource(
         uri="email://{entry_id}",
         name="email_details",
         title="Email Details",
@@ -610,41 +575,4 @@ def register_task_resources(mcp: FastMCP) -> None:
         name="tasks_active",
         title="Active Tasks",
         description="List active (incomplete) tasks",
-    )
-    def tasks_active() -> str:
-        """Get active (incomplete) tasks.
-
-        Returns:
-            Formatted text with task summaries
-        """
-        bridge = _get_bridge()
-
-        # Get active tasks from bridge (include_completed=False)
-        tasks_data = bridge.list_tasks(include_completed=False)
-
-        # Convert to TaskSummary models
-        tasks = [
-            TaskSummary(
-                entry_id=task["entry_id"],
-                subject=task["subject"],
-                body=task["body"],
-                due_date=task["due_date"],
-                status=task["status"],
-                priority=task["priority"],
-                complete=task["complete"],
-                percent_complete=task["percent_complete"],
-            )
-            for task in tasks_data
-        ]
-
-        # Format as text
-        if not tasks:
-            return "No active tasks"
-
-        lines = [f"Active Tasks ({len(tasks)} items)", ""]
-        for task in tasks:
-            lines.append(_format_task_summary(task))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
-
+    )(tasks_active)
