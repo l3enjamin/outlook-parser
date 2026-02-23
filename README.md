@@ -96,6 +96,25 @@ mailtool parsed-email --id <entry_id> --tier medium
 
 See the [mailtool-plugin](https://github.com/utsmok/mailtool-plugin) repository for Claude Code integration instructions.
 
+#### Read-Only Mode
+
+You can run the MCP server in a restricted read-only mode that only allows searching and reading emails. This mode disables all modification tools (sending, deleting, marking as read, etc.) and all calendar/task management tools.
+
+To enable read-only mode, add the `--search-read-only` flag when starting the server:
+
+```bash
+uv run --with pywin32 -m mailtool.mcp.server --search-read-only
+```
+
+In this mode, only the following tools are available:
+- `list_emails`
+- `get_email`
+- `search_emails`
+- `search_emails_by_sender`
+
+And only the following resource is available:
+- `inbox://emails`
+
 ## How It Works
 
 The library uses Windows COM automation to communicate with Outlook:
