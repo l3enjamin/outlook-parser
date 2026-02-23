@@ -25,7 +25,7 @@ For Claude Code integration, install the [mailtool-plugin](https://github.com/ut
 /plugin install mailtool
 ```
 
-This will configure the MCP server with 24 tools for email, calendar, and task management.
+This will configure the MCP server with 23 tools for email, calendar, and task management.
 
 ## Prerequisites
 
@@ -85,6 +85,9 @@ mailtool parsed-email --id <entry_id>
 
 # Get parsed email with quoted replies removed (extract latest reply only)
 mailtool parsed-email --id <entry_id> --remove-quoted
+
+# Get parsed email with specific deduplication tier (none, low, medium, high)
+mailtool parsed-email --id <entry_id> --tier medium
 ```
 
 ### As an MCP Server (for Claude Code)
@@ -112,10 +115,10 @@ mailtool/
 │       ├── cli.py          # CLI interface
 │       └── mcp/            # MCP Server (SDK v2 + FastMCP)
 │           ├── __init__.py
-│           ├── server.py   # FastMCP server with 24 tools
+│           ├── server.py   # FastMCP server with 23 tools
 │           ├── models.py   # Pydantic models
 │           ├── lifespan.py # Async COM bridge lifecycle
-│           ├── resources.py # 7 resources
+│           ├── resources.py # 5 resources
 │           └── exceptions.py # Custom exceptions
 ├── tests/
 │   ├── conftest.py         # Test fixtures
@@ -141,7 +144,7 @@ mailtool/
 - ✅ **uv for dependencies** - No global Python pollution
 - ✅ **Official MCP SDK v2** - Type-safe, well-documented, maintainable
 - ✅ **Structured output** - Pydantic models for all tool results
-- ✅ **7 Resources** - Quick data access without tool calls
+- ✅ **5 Resources** - Quick data access without tool calls
 - ✅ **No API registration** - Uses existing Outlook auth
 - ✅ **Works with any Outlook account**
 - ✅ **Full access** to email, calendar, and tasks
@@ -162,9 +165,9 @@ This includes a Model Context Protocol (MCP) server for Claude Code integration 
 
 ### Key Features
 
-- **25 Tools** for email, calendar, and task management
-- **Structured Email Parsing** - New `parse_email` tool returns detailed objects similar to `mail-parser` (headers, body parts, metadata)
-- **7 Resources** for quick data access (inbox, calendar, tasks)
+- **23 Tools** for email, calendar, and task management
+- **Structured Email Parsing** - `get_email` tool now returns detailed objects similar to `mail-parser` (headers, body parts, metadata)
+- **5 Resources** for quick data access (inbox, calendar, tasks)
 - **Structured Output** - All tools return typed Pydantic models
 - **Type Safety** - Full type annotations for better IDE support
 - **Error Handling** - Custom exception classes with detailed error messages
@@ -206,7 +209,7 @@ Outlook Application
 **Key improvements from v2.2:**
 - ✅ Official MCP SDK v2 (mcp>=0.9.0) with FastMCP framework
 - ✅ Structured Pydantic models for all tool outputs (EmailDetails, AppointmentDetails, TaskSummary, etc.)
-- ✅ 7 resources for quick data access (inbox://emails, calendar://today, tasks://active, etc.)
+- ✅ 5 resources for quick data access (inbox://emails, calendar://today, tasks://active, etc.)
 - ✅ Custom exception classes (OutlookNotFoundError, OutlookComError, OutlookValidationError)
 - ✅ Comprehensive logging for debugging and monitoring
 - ✅ Type-safe tool definitions with @mcp.tool() decorator
@@ -269,7 +272,7 @@ The MCP server is implemented in `src/mailtool/mcp/` using the official MCP Pyth
 - **server.py** - FastMCP server with 23 tools
 - **models.py** - Pydantic models for structured output
 - **lifespan.py** - Async context manager for COM bridge lifecycle
-- **resources.py** - 7 resources for quick data access
+- **resources.py** - 5 resources for quick data access
 - **exceptions.py** - Custom exception classes
 
 See [CLAUDE.md](CLAUDE.md) for development patterns and architecture.

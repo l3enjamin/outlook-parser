@@ -83,7 +83,15 @@ class EmailParsed(BaseModel):
     )
     latest_reply: str | None = Field(
         default=None,
-        description="Extracted latest reply content (if remove_quoted=True)",
+        description="Extracted latest reply content (if deduplication is active)",
+    )
+    deduplication_tier: str | None = Field(
+        default="none",
+        description="Deduplication strategy used (none, low, medium, high)",
+    )
+    parent_found: bool | None = Field(
+        default=None,
+        description="Whether the parent/quoted email was found in Outlook (for smart deduplication)",
     )
 
 

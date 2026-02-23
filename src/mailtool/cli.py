@@ -141,7 +141,13 @@ def main() -> None:
     parsed_parser.add_argument(
         "--remove-quoted",
         action="store_true",
-        help="Attempt to strip quoted text and replies",
+        help="DEPRECATED: Use --tier low. Strip quoted text.",
+    )
+    parsed_parser.add_argument(
+        "--tier",
+        choices=["none", "low", "medium", "high"],
+        default="none",
+        help="Deduplication tier (low=metadata, medium=subject)",
     )
 
     # Send email command
@@ -387,7 +393,9 @@ def main() -> None:
 
     elif args.command == "parsed-email":
         email = bridge.get_email_parsed(
-            entry_id=args.id, remove_quoted=args.remove_quoted
+            entry_id=args.id,
+            remove_quoted=args.remove_quoted,
+            deduplication_tier=args.tier,
         )
         if email:
             print(json.dumps(email, indent=2, default=str))

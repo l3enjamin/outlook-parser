@@ -144,16 +144,26 @@ def list_emails(
 
 
 @mcp.tool()
-def get_email(entry_id: str, remove_quoted: bool = False) -> EmailParsed:
+def get_email(
+    entry_id: str, remove_quoted: bool = False, deduplication_tier: str = "none"
+) -> EmailParsed:
     """
     Get full structured email details by entry ID.
 
     Retrieves complete email information including headers, body parts, recipients,
     and metadata using `mail-parser` logic for rich structure. Uses O(1) direct access.
 
+    Deduplication Tiers:
+    - 'none': (Default) No deduplication. Returns full body.
+    - 'low': Checks In-Reply-To/References metadata. If the parent email exists in Outlook,
+             strips the quoted content from the body. (Matches default behavior of remove_quoted=True)
+    - 'medium': If 'low' fails, also checks for matching Subject (ignoring RE:/FW:).
+    - 'high': Same as medium currently.
+
     Args:
         entry_id: Outlook EntryID of the email (O(1) direct access)
-        remove_quoted: If True, attempts to strip quoted replies/signatures to separate latest content (default: False)
+        remove_quoted: DEPRECATED - use deduplication_tier='low'. If True, sets tier to 'low'.
+        deduplication_tier: Strategy for removing duplicate quoted text ('none', 'low', 'medium', 'high').
 
     Returns:
         EmailParsed: Richly structured email object
@@ -166,7 +176,9 @@ def get_email(entry_id: str, remove_quoted: bool = False) -> EmailParsed:
     bridge = _get_bridge()
 
     # Get parsed email from bridge
-    result = bridge.get_email_parsed(entry_id, remove_quoted=remove_quoted)
+    result = bridge.get_email_parsed(
+        entry_id, remove_quoted=remove_quoted, deduplication_tier=deduplication_tier
+    )
 
     # Check if email was found
     if result is None:

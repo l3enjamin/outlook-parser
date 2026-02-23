@@ -5,7 +5,6 @@ Resources are registered with the FastMCP server and return formatted text/JSON 
 
 Email resources:
 - inbox://emails - List recent emails from inbox
-- inbox://unread - List unread emails from inbox
 - email://{entry_id} - Get full email details by entry ID (template resource)
 
 Calendar resources:
@@ -14,7 +13,6 @@ Calendar resources:
 
 Task resources:
 - tasks://active - List active (incomplete) tasks
-- tasks://all - List all tasks (including completed)
 """
 
 import logging
@@ -160,10 +158,9 @@ def register_email_resources(mcp: FastMCP) -> None:
     Args:
         mcp: FastMCP server instance
 
-    This function registers three email resources:
+    This function registers two email resources:
     1. inbox://emails - Lists recent emails (limit 50)
-    2. inbox://unread - Lists unread emails (limit 50)
-    3. email://{entry_id} - Gets full email details (template resource)
+    2. email://{entry_id} - Gets full email details (template resource)
     """
 
     @mcp.resource(
@@ -202,53 +199,6 @@ def register_email_resources(mcp: FastMCP) -> None:
             return "No emails found in inbox"
 
         lines = [f"Inbox Emails ({len(emails)} items)", ""]
-        for email in emails:
-            lines.append(_format_email_summary(email))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)
-
-    @mcp.resource(
-        uri="inbox://unread",
-        name="inbox_unread",
-        title="Unread Inbox Emails",
-        description="List unread emails from the inbox (max 50)",
-    )
-    def inbox_unread() -> str:
-        """Get unread emails from inbox.
-
-        Returns:
-            Formatted text with unread email summaries
-        """
-        bridge = _get_bridge()
-
-        # Get all emails from bridge
-        emails_data = bridge.list_emails(limit=50, folder="Inbox")
-
-        # Filter to only unread emails
-        unread_emails_data = [
-            email for email in emails_data if email.get("unread", False)
-        ]
-
-        # Convert to EmailSummary models
-        emails = [
-            EmailSummary(
-                entry_id=email["entry_id"],
-                subject=email["subject"],
-                sender=email["sender"],
-                sender_name=email["sender_name"],
-                received_time=email["received_time"],
-                unread=email["unread"],
-                has_attachments=email["has_attachments"],
-            )
-            for email in unread_emails_data
-        ]
-
-        # Format as text
-        if not emails:
-            return "No unread emails in inbox"
-
-        lines = [f"Unread Emails ({len(emails)} items)", ""]
         for email in emails:
             lines.append(_format_email_summary(email))
             lines.append("-" * 60)
@@ -498,9 +448,8 @@ def register_task_resources(mcp: FastMCP) -> None:
     Args:
         mcp: FastMCP server instance
 
-    This function registers two task resources:
+    This function registers one task resource:
     1. tasks://active - Lists active (incomplete) tasks
-    2. tasks://all - Lists all tasks (including completed)
     """
 
     @mcp.resource(
@@ -546,45 +495,3 @@ def register_task_resources(mcp: FastMCP) -> None:
 
         return "\n".join(lines)
 
-    @mcp.resource(
-        uri="tasks://all",
-        name="tasks_all",
-        title="All Tasks",
-        description="List all tasks (including completed)",
-    )
-    def tasks_all() -> str:
-        """Get all tasks (including completed).
-
-        Returns:
-            Formatted text with task summaries
-        """
-        bridge = _get_bridge()
-
-        # Get all tasks from bridge (include_completed=True)
-        tasks_data = bridge.list_tasks(include_completed=True)
-
-        # Convert to TaskSummary models
-        tasks = [
-            TaskSummary(
-                entry_id=task["entry_id"],
-                subject=task["subject"],
-                body=task["body"],
-                due_date=task["due_date"],
-                status=task["status"],
-                priority=task["priority"],
-                complete=task["complete"],
-                percent_complete=task["percent_complete"],
-            )
-            for task in tasks_data
-        ]
-
-        # Format as text
-        if not tasks:
-            return "No tasks found"
-
-        lines = [f"All Tasks ({len(tasks)} items)", ""]
-        for task in tasks:
-            lines.append(_format_task_summary(task))
-            lines.append("-" * 60)
-
-        return "\n".join(lines)

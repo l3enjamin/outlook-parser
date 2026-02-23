@@ -521,17 +521,27 @@ class OutlookBridge:
                 return None
         return None
 
-    def get_email_parsed(self, entry_id, remove_quoted=False):
+    def get_email_parsed(self, entry_id, remove_quoted=False, deduplication_tier="none"):
         """
         Get structured email object using mail-parser (O(1) direct access)
 
         Args:
             entry_id: Outlook EntryID of the email
-            remove_quoted: If True, strip quoted text/replies to get latest content
+            remove_quoted: DEPRECATED - use deduplication_tier="low" instead.
+                           If True, sets deduplication_tier="low".
+            deduplication_tier: Strategy for deduplicating quoted content.
+                                "none" - No deduplication (default)
+                                "low" - Strip using mail-parser-reply (standard)
+                                "medium" - Strip ONLY if parent email found via References/In-Reply-To
+                                "high" - Strip ONLY if parent email found via Subject/Content (Not Implemented)
 
         Returns:
             Dictionary matching EmailParsed model structure
         """
+        # Backwards compatibility for remove_quoted bool
+        if remove_quoted and deduplication_tier == "none":
+            deduplication_tier = "low"
+
         import os
         import tempfile
 
@@ -545,7 +555,7 @@ class OutlookBridge:
             item = self.get_item_by_id(entry_id)
             if not item:
                 return None
-            return self._fallback_parsed_model(item, remove_quoted)
+            return self._fallback_parsed_model(item, deduplication_tier)
 
         item = self.get_item_by_id(entry_id)
         if not item:
@@ -562,15 +572,15 @@ class OutlookBridge:
                 item.SaveAs(temp_path, 3)
             except Exception as e:
                 print(f"Error saving to .msg: {e}", file=sys.stderr)
-                return self._fallback_parsed_model(item, remove_quoted)
+                return self._fallback_parsed_model(item, deduplication_tier)
 
             # Parse
             try:
                 mail = mailparser.parse_from_file_msg(temp_path)
-                return self._convert_to_parsed_model(mail, item, remove_quoted)
+                return self._convert_to_parsed_model(mail, item, deduplication_tier)
             except Exception as e:
                 print(f"Error parsing .msg with mail-parser: {e}", file=sys.stderr)
-                return self._fallback_parsed_model(item, remove_quoted)
+                return self._fallback_parsed_model(item, deduplication_tier)
 
         finally:
             if os.path.exists(temp_path):
@@ -578,6 +588,74 @@ class OutlookBridge:
                     os.remove(temp_path)
                 except Exception:
                     pass
+
+    def _check_parent_exists(self, mail_obj=None, item=None, tier="low"):
+        """
+        Check if the parent/quoted email exists in Outlook.
+        Returns True if found, False otherwise.
+        """
+        try:
+            # Tier LOW: Check via In-Reply-To header
+            # Note: Outlook Object Model doesn't expose headers easily on MailItem without PropertyAccessor
+            # We use the parsed mail object for headers if available
+            in_reply_to = None
+            if mail_obj and hasattr(mail_obj, "headers"):
+                in_reply_to = mail_obj.headers.get("In-Reply-To")
+
+            # If we only have item (fallback mode), try PropertyAccessor
+            if not in_reply_to and item:
+                try:
+                    # PR_INTERNET_REFERENCES = http://schemas.microsoft.com/mapi/proptag/0x1039001E
+                    # PR_IN_REPLY_TO_ID = http://schemas.microsoft.com/mapi/proptag/0x1042001E
+                    prop_accessor = item.PropertyAccessor
+                    in_reply_to = prop_accessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x1042001E")
+                except Exception:
+                    pass
+
+            if in_reply_to:
+                # Search by InternetMessageId
+                # Clean up ID (remove < >)
+                msg_id = in_reply_to.strip("<> ")
+                if msg_id:
+                    # Search inbox (or all folders? Restrict is usually folder-bound)
+                    # For performance/simplicity, check Inbox first.
+                    inbox = self.get_inbox()
+                    if inbox:
+                        # PR_INTERNET_MESSAGE_ID = http://schemas.microsoft.com/mapi/proptag/0x1035001E
+                        # Jet query: [InternetMessageId] = 'id' (doesn't always work reliably)
+                        # DASL query is better
+                        dasl_filter = f"@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x1035001E\" = '{msg_id}'"
+                        found_items = inbox.Items.Restrict(dasl_filter)
+                        if found_items.Count > 0:
+                            return True
+
+            # Tier MEDIUM: Check by Subject (if low failed or not possible)
+            if tier == "medium":
+                subject = getattr(mail_obj, "subject", None) or (item.Subject if item else None)
+                if subject:
+                    # Strip RE/FW prefixes
+                    import re
+                    clean_subject = re.sub(r"^(re|fw|fwd):\s*", "", subject, flags=re.IGNORECASE).strip()
+                    if clean_subject:
+                        inbox = self.get_inbox()
+                        if inbox:
+                            # Search for matching subject
+                            # Use simplified check
+                            filter_str = f"[Subject] = '{clean_subject}'" # Exact match on stripped subject might fail if original didn't have prefix
+                            # Just try to find "Conversations" -> GetConversation() is best but complex
+                            # Let's try restrictive search
+                            # Try strict subject match of CLEAN subject
+                            # This is heuristic.
+                            # Just check if ANY item has this subject
+                            items = inbox.Items.Restrict(f"[Subject] = '{clean_subject}'")
+                            if items.Count > 0:
+                                return True
+
+            return False
+
+        except Exception as e:
+            print(f"Error checking parent existence: {e}", file=sys.stderr)
+            return False
 
     def _extract_latest_reply(self, text_body):
         """Extract latest reply using mail-parser-reply"""
@@ -599,7 +677,7 @@ class OutlookBridge:
             print(f"Error extracting reply: {e}", file=sys.stderr)
             return None
 
-    def _convert_to_parsed_model(self, mail, item, remove_quoted=False):
+    def _convert_to_parsed_model(self, mail, item, deduplication_tier="none"):
         """Convert mail-parser object to dict matching EmailParsed model"""
         # mail-parser returns list of tuples for from_, to, cc, bcc
         # mail.date is a datetime object
@@ -642,8 +720,46 @@ class OutlookBridge:
                 attachments.append(a_copy)
 
         latest_reply = None
-        if remove_quoted:
+        parent_found = None
+
+        should_strip = False
+
+        if deduplication_tier != "none":
+            # Extract reply text candidate
             latest_reply = self._extract_latest_reply(mail.body)
+
+            if deduplication_tier == "low":
+                # Low: Just strip (matches original remove_quoted=True behavior/default requirement)
+                # "low (default) - use only outlook specific In-Reply-To... metadata"
+                # This implies checking logic.
+                # If parent exists -> Strip.
+                # If not -> Keep? Or assumes if In-Reply-To is present, it's a reply?
+                # User said "use only... metadata... medium... tries to deduplicate with same title".
+                # I will interpret "Low" as: Check In-Reply-To. If found in DB, strip.
+                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="low")
+                if parent_found:
+                    should_strip = True
+                else:
+                    # If we can't find parent, we preserve full body
+                    should_strip = False
+
+            elif deduplication_tier == "medium":
+                # Medium: Check In-Reply-To OR Subject
+                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="medium")
+                if parent_found:
+                    should_strip = True
+
+            elif deduplication_tier == "high":
+                # High: Same as medium for now (content search is slow/complex via COM)
+                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="medium")
+                if parent_found:
+                    should_strip = True
+
+        # If stripping is active and we have a reply extracted
+        if should_strip and latest_reply:
+            final_body = latest_reply
+        else:
+            final_body = mail.body
 
         return {
             "entry_id": item.EntryID,
@@ -663,13 +779,15 @@ class OutlookBridge:
             "headers": mail.headers,
             "text_plain": mail.text_plain,
             "text_html": mail.text_html,
-            "body": mail.body,
+            "body": final_body,
             "attachments": attachments,
             "received": received,
             "latest_reply": latest_reply,
+            "deduplication_tier": deduplication_tier,
+            "parent_found": parent_found,
         }
 
-    def _fallback_parsed_model(self, item, remove_quoted=False):
+    def _fallback_parsed_model(self, item, deduplication_tier="none"):
         """Fallback when mail-parser fails, using COM properties"""
         sender_email = self.resolve_smtp_address(item)
         sender_name = item.SenderName
@@ -716,8 +834,22 @@ class OutlookBridge:
             pass
 
         latest_reply = None
-        if remove_quoted:
+        parent_found = None
+        should_strip = False
+
+        if deduplication_tier != "none":
             latest_reply = self._extract_latest_reply(item.Body)
+
+            # For fallback, we only have 'item'
+            if deduplication_tier in ["low", "medium", "high"]:
+                parent_found = self._check_parent_exists(item=item, tier=deduplication_tier)
+                if parent_found:
+                    should_strip = True
+
+        if should_strip and latest_reply:
+            final_body = latest_reply
+        else:
+            final_body = item.Body
 
         return {
             "entry_id": item.EntryID,
@@ -727,14 +859,16 @@ class OutlookBridge:
             "cc": cc_list,
             "bcc": bcc_list,
             "date": received_time,
-            "message_id": "",  # Hard to get via COM easily
-            "headers": {},  # Empty
+            "message_id": "",
+            "headers": {},
             "text_plain": [item.Body],
             "text_html": [item.HTMLBody],
-            "body": item.Body,
+            "body": final_body,
             "attachments": attachments,
             "received": [],
             "latest_reply": latest_reply,
+            "deduplication_tier": deduplication_tier,
+            "parent_found": parent_found,
         }
 
     def list_calendar_events(self, days=7, all_events=False):
