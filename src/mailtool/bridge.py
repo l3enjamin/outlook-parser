@@ -650,7 +650,7 @@ class OutlookBridge:
                 if subject:
                     # Strip RE/FW prefixes
                     import re
-                    clean_subject = re.sub(r"^(re|fw|fwd):\s*", "", subject, flags=re.IGNORECASE).strip()
+                    clean_subject = re.sub(r"^((re|fw|fwd):\s*)+", "", subject, flags=re.IGNORECASE).strip()
                     if clean_subject:
                         inbox = self.get_inbox()
                         if inbox:
