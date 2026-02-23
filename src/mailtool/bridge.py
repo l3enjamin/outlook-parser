@@ -662,7 +662,7 @@ class OutlookBridge:
                             # Try strict subject match of CLEAN subject
                             # This is heuristic.
                             # Just check if ANY item has this subject
-                            items = inbox.Items.Restrict(f"[Subject] = '{clean_subject}'")
+                            items = inbox.Items.Restrict(f"[Subject] = '{clean_subject.replace("'", "''")}'")
                             if items.Count > 0:
                                 return True
 
