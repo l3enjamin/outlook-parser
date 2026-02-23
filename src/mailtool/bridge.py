@@ -639,7 +639,7 @@ class OutlookBridge:
                         # PR_INTERNET_MESSAGE_ID = http://schemas.microsoft.com/mapi/proptag/0x1035001E
                         # Jet query: [InternetMessageId] = 'id' (doesn't always work reliably)
                         # DASL query is better
-                        dasl_filter = f"@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x1035001E\" = '{msg_id}'"
+                        dasl_filter = f"@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x1035001E\" = '{msg_id.replace("'", "''")}'"
                         found_items = inbox.Items.Restrict(dasl_filter)
                         if found_items.Count > 0:
                             return True
