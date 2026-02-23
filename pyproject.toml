@@ -28,6 +28,7 @@ dependencies = [
     "mcp[cli]>=0.9.0",
     "mail-parser>=4.1.4",
     "mail-parser-reply>=1.36",
+    "beautifulsoup4>=4.14.3",
 ]
 
 [project.scripts]

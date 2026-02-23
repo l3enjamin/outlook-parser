@@ -145,7 +145,10 @@ def list_emails(
 
 @mcp.tool()
 def get_email(
-    entry_id: str, remove_quoted: bool = False, deduplication_tier: str = "none"
+    entry_id: str,
+    remove_quoted: bool = False,
+    deduplication_tier: str = "none",
+    strip_html: bool = True,
 ) -> EmailParsed:
     """
     Get full structured email details by entry ID.
@@ -164,6 +167,7 @@ def get_email(
         entry_id: Outlook EntryID of the email (O(1) direct access)
         remove_quoted: DEPRECATED - use deduplication_tier='low'. If True, sets tier to 'low'.
         deduplication_tier: Strategy for removing duplicate quoted text ('none', 'low', 'medium', 'high').
+        strip_html: If True, remove HTML code from body and clear text_html field (default: True).
 
     Returns:
         EmailParsed: Richly structured email object
@@ -177,7 +181,10 @@ def get_email(
 
     # Get parsed email from bridge
     result = bridge.get_email_parsed(
-        entry_id, remove_quoted=remove_quoted, deduplication_tier=deduplication_tier
+        entry_id,
+        remove_quoted=remove_quoted,
+        deduplication_tier=deduplication_tier,
+        strip_html=strip_html,
     )
 
     # Check if email was found

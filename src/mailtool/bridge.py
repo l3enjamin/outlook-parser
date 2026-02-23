@@ -521,7 +521,13 @@ class OutlookBridge:
                 return None
         return None
 
-    def get_email_parsed(self, entry_id, remove_quoted=False, deduplication_tier="none"):
+    def get_email_parsed(
+        self,
+        entry_id,
+        remove_quoted=False,
+        deduplication_tier="none",
+        strip_html=True,
+    ):
         """
         Get structured email object using mail-parser (O(1) direct access)
 
@@ -534,6 +540,7 @@ class OutlookBridge:
                                 "low" - Strip using mail-parser-reply (standard)
                                 "medium" - Strip ONLY if parent email found via References/In-Reply-To
                                 "high" - Strip ONLY if parent email found via Subject/Content (Not Implemented)
+            strip_html: If True, remove HTML code from body and clear text_html field (default: True)
 
         Returns:
             Dictionary matching EmailParsed model structure
@@ -555,7 +562,9 @@ class OutlookBridge:
             item = self.get_item_by_id(entry_id)
             if not item:
                 return None
-            return self._fallback_parsed_model(item, deduplication_tier)
+            return self._fallback_parsed_model(
+                item, deduplication_tier, strip_html=strip_html
+            )
 
         item = self.get_item_by_id(entry_id)
         if not item:
@@ -572,15 +581,21 @@ class OutlookBridge:
                 item.SaveAs(temp_path, 3)
             except Exception as e:
                 print(f"Error saving to .msg: {e}", file=sys.stderr)
-                return self._fallback_parsed_model(item, deduplication_tier)
+                return self._fallback_parsed_model(
+                    item, deduplication_tier, strip_html=strip_html
+                )
 
             # Parse
             try:
                 mail = mailparser.parse_from_file_msg(temp_path)
-                return self._convert_to_parsed_model(mail, item, deduplication_tier)
+                return self._convert_to_parsed_model(
+                    mail, item, deduplication_tier, strip_html=strip_html
+                )
             except Exception as e:
                 print(f"Error parsing .msg with mail-parser: {e}", file=sys.stderr)
-                return self._fallback_parsed_model(item, deduplication_tier)
+                return self._fallback_parsed_model(
+                    item, deduplication_tier, strip_html=strip_html
+                )
 
         finally:
             if os.path.exists(temp_path):
@@ -677,7 +692,9 @@ class OutlookBridge:
             print(f"Error extracting reply: {e}", file=sys.stderr)
             return None
 
-    def _convert_to_parsed_model(self, mail, item, deduplication_tier="none"):
+    def _convert_to_parsed_model(
+        self, mail, item, deduplication_tier="none", strip_html=True
+    ):
         """Convert mail-parser object to dict matching EmailParsed model"""
         # mail-parser returns list of tuples for from_, to, cc, bcc
         # mail.date is a datetime object
@@ -761,6 +778,38 @@ class OutlookBridge:
         else:
             final_body = mail.body
 
+        text_html = mail.text_html
+
+        if strip_html:
+            # Check if we need to convert HTML to text
+            # If body is empty or looks like HTML, and we have HTML content
+            import re
+
+            is_html = bool(re.search(r"<[a-z][\s\S]*>", final_body, re.IGNORECASE))
+            if is_html or (not final_body and text_html):
+                try:
+                    from bs4 import BeautifulSoup
+
+                    # Use text_html if body is empty
+                    source = (
+                        final_body
+                        if final_body and is_html
+                        else (text_html[0] if text_html else "")
+                    )
+                    if source:
+                        soup = BeautifulSoup(source, "html.parser")
+                        final_body = soup.get_text(separator="\n").strip()
+                except ImportError:
+                    print(
+                        "Warning: beautifulsoup4 not installed, skipping HTML stripping",
+                        file=sys.stderr,
+                    )
+                except Exception as e:
+                    print(f"Error stripping HTML: {e}", file=sys.stderr)
+
+            # Clear text_html to save context
+            text_html = []
+
         return {
             "entry_id": item.EntryID,
             "subject": mail.subject,
@@ -778,7 +827,7 @@ class OutlookBridge:
             "message_id": mail.message_id,
             "headers": mail.headers,
             "text_plain": mail.text_plain,
-            "text_html": mail.text_html,
+            "text_html": text_html,
             "body": final_body,
             "attachments": attachments,
             "received": received,
@@ -787,7 +836,9 @@ class OutlookBridge:
             "parent_found": parent_found,
         }
 
-    def _fallback_parsed_model(self, item, deduplication_tier="none"):
+    def _fallback_parsed_model(
+        self, item, deduplication_tier="none", strip_html=True
+    ):
         """Fallback when mail-parser fails, using COM properties"""
         sender_email = self.resolve_smtp_address(item)
         sender_name = item.SenderName
@@ -851,6 +902,25 @@ class OutlookBridge:
         else:
             final_body = item.Body
 
+        text_html = [item.HTMLBody]
+
+        if strip_html:
+            # If body is empty, try to get from HTML
+            # Note: item.Body is usually plain text in Outlook Object Model
+            if not final_body and item.HTMLBody:
+                try:
+                    from bs4 import BeautifulSoup
+
+                    soup = BeautifulSoup(item.HTMLBody, "html.parser")
+                    final_body = soup.get_text(separator="\n").strip()
+                except ImportError:
+                    pass
+                except Exception:
+                    pass
+
+            # Clear text_html
+            text_html = []
+
         return {
             "entry_id": item.EntryID,
             "subject": item.Subject,
@@ -862,7 +932,7 @@ class OutlookBridge:
             "message_id": "",
             "headers": {},
             "text_plain": [item.Body],
-            "text_html": [item.HTMLBody],
+            "text_html": text_html,
             "body": final_body,
             "attachments": attachments,
             "received": [],

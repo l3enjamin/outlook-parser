@@ -87,6 +87,8 @@ mailtool parsed-email --id <entry_id>
 mailtool parsed-email --id <entry_id> --remove-quoted
 
 # Get parsed email with specific deduplication tier (none, low, medium, high)
+# Note: By default, HTML content is stripped from the body to save context.
+# Use --no-strip-html to preserve HTML.
 mailtool parsed-email --id <entry_id> --tier medium
 ```
 
@@ -166,7 +168,7 @@ This includes a Model Context Protocol (MCP) server for Claude Code integration 
 ### Key Features
 
 - **23 Tools** for email, calendar, and task management
-- **Structured Email Parsing** - `get_email` tool now returns detailed objects similar to `mail-parser` (headers, body parts, metadata)
+- **Structured Email Parsing** - `get_email` tool now returns detailed objects similar to `mail-parser` (headers, body parts, metadata). Automatically strips HTML by default to save context.
 - **5 Resources** for quick data access (inbox, calendar, tasks)
 - **Structured Output** - All tools return typed Pydantic models
 - **Type Safety** - Full type annotations for better IDE support

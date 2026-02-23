@@ -149,6 +149,11 @@ def main() -> None:
         default="none",
         help="Deduplication tier (low=metadata, medium=subject)",
     )
+    parsed_parser.add_argument(
+        "--no-strip-html",
+        action="store_true",
+        help="Do not strip HTML from body (default is to strip and clear text_html)",
+    )
 
     # Send email command
     send_parser = subparsers.add_parser("send", help="Send an email")
@@ -396,6 +401,7 @@ def main() -> None:
             entry_id=args.id,
             remove_quoted=args.remove_quoted,
             deduplication_tier=args.tier,
+            strip_html=not args.no_strip_html,
         )
         if email:
             print(json.dumps(email, indent=2, default=str))
