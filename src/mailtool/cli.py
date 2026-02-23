@@ -133,6 +133,28 @@ def main() -> None:
     get_parser = subparsers.add_parser("email", help="Get email details")
     get_parser.add_argument("--id", required=True, help="Email entry ID")
 
+    # Parsed email command
+    parsed_parser = subparsers.add_parser(
+        "parsed-email", help="Get parsed email structure"
+    )
+    parsed_parser.add_argument("--id", required=True, help="Email entry ID")
+    parsed_parser.add_argument(
+        "--remove-quoted",
+        action="store_true",
+        help="DEPRECATED: Use --tier low. Strip quoted text.",
+    )
+    parsed_parser.add_argument(
+        "--tier",
+        choices=["none", "low", "medium", "high"],
+        default="none",
+        help="Deduplication tier (low=metadata, medium=subject)",
+    )
+    parsed_parser.add_argument(
+        "--no-strip-html",
+        action="store_true",
+        help="Do not strip HTML from body (default is to strip and clear text_html)",
+    )
+
     # Send email command
     send_parser = subparsers.add_parser("send", help="Send an email")
     send_parser.add_argument("--to", required=True, help="Recipient email address")
@@ -372,6 +394,19 @@ def main() -> None:
             print(json.dumps(email, indent=2))
         else:
             print("Email not found", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "parsed-email":
+        email = bridge.get_email_parsed(
+            entry_id=args.id,
+            remove_quoted=args.remove_quoted,
+            deduplication_tier=args.tier,
+            strip_html=not args.no_strip_html,
+        )
+        if email:
+            print(json.dumps(email, indent=2, default=str))
+        else:
+            print("Email not found or parsing failed", file=sys.stderr)
             sys.exit(1)
 
     elif args.command == "send":

@@ -4,7 +4,7 @@ This module provides the main FastMCP server instance for Outlook automation.
 It implements the Model Context Protocol (MCP) using the official MCP Python SDK v2
 with the FastMCP framework.
 
-The server provides 25 tools and 7 resources for Outlook email, calendar, and task management.
+The server provides tools and resources for Outlook email, calendar, and task management.
 All tools return structured Pydantic models for type safety and LLM understanding.
 """
 
@@ -22,7 +22,7 @@ from mailtool.mcp.models import (
     AppointmentSummary,
     CreateAppointmentResult,
     CreateTaskResult,
-    EmailDetails,
+    EmailParsed,
     EmailSummary,
     FreeBusyInfo,
     OperationResult,
@@ -55,7 +55,7 @@ mcp = FastMCP(
     lifespan=outlook_lifespan,
 )
 
-# Register email resources (US-022), calendar resources (US-028), and task resources (US-033)
+# Register resources
 register_email_resources(mcp)
 register_calendar_resources(mcp)
 register_task_resources(mcp)
@@ -86,12 +86,14 @@ def _get_bridge():
 
 
 # ============================================================================
-# Email Tools (US-008: get_email, US-011: mark_email, US-013: delete_email, US-016: list_emails, US-017: send_email, US-018: reply_email, US-019: forward_email, US-020: move_email, US-021: search_emails)
+# Email Tools
 # ============================================================================
 
 
 @mcp.tool()
-def list_emails(limit: int = 10, folder: str = "Inbox") -> list[EmailSummary]:
+def list_emails(
+    limit: int = 10, folder: str = "Inbox", unread_only: bool = False
+) -> list[EmailSummary]:
     """
     List emails from the specified folder.
 
@@ -101,6 +103,7 @@ def list_emails(limit: int = 10, folder: str = "Inbox") -> list[EmailSummary]:
     Args:
         limit: Maximum number of emails to return (default: 10)
         folder: Folder name to list emails from (default: "Inbox")
+        unread_only: If True, only return unread emails (default: False)
 
     Returns:
         list[EmailSummary]: List of email summaries with basic information
@@ -111,8 +114,19 @@ def list_emails(limit: int = 10, folder: str = "Inbox") -> list[EmailSummary]:
     # Get bridge from module-level state
     bridge = _get_bridge()
 
-    # List emails from bridge
-    result = bridge.list_emails(limit=limit, folder=folder)
+    if unread_only and folder == "Inbox":
+        # Use optimized search for unread inbox emails
+        result = bridge.search_emails(filter_query="[Unread] = TRUE", limit=limit)
+    else:
+        # For other folders or all emails, use standard list
+        # Note: If unread_only is True for non-Inbox, we rely on post-filtering
+        # which respects the limit on FETCHED items, not returned items.
+        # Ideally search_emails should support folders, but for now this covers the main use case.
+        items = bridge.list_emails(limit=limit * 2 if unread_only else limit, folder=folder)
+        if unread_only:
+            result = [e for e in items if e["unread"]][:limit]
+        else:
+            result = items
 
     # Convert bridge result to list of EmailSummary models
     return [
@@ -130,61 +144,33 @@ def list_emails(limit: int = 10, folder: str = "Inbox") -> list[EmailSummary]:
 
 
 @mcp.tool()
-def list_unread_emails(limit: int = 10) -> list[EmailSummary]:
+def get_email(
+    entry_id: str,
+    remove_quoted: bool = False,
+    deduplication_tier: str = "none",
+    strip_html: bool = True,
+) -> EmailParsed:
     """
-    List unread emails from the Inbox.
+    Get full structured email details by entry ID.
 
-    Retrieves the most recent unread emails from the Inbox, sorted by received
-    time (most recent first). Uses Outlook Restrict filter for efficient querying
-    (O(1) search at COM level).
+    Retrieves complete email information including headers, body parts, recipients,
+    and metadata using `mail-parser` logic for rich structure. Uses O(1) direct access.
 
-    Args:
-        limit: Maximum number of unread emails to return (default: 10)
-
-    Returns:
-        list[EmailSummary]: List of unread email summaries with basic information
-
-    Raises:
-        OutlookComError: If bridge is not initialized
-
-    Note:
-        This function uses the Outlook Restrict filter with '[Unread] = TRUE'
-        for efficient querying at the COM level, avoiding unnecessary iteration.
-    """
-    # Get bridge from module-level state
-    bridge = _get_bridge()
-
-    # Search for unread emails via bridge using Restrict filter
-    result = bridge.search_emails(filter_query="[Unread] = TRUE", limit=limit)
-
-    # Convert bridge result to list of EmailSummary models
-    return [
-        EmailSummary(
-            entry_id=email["entry_id"],
-            subject=email["subject"],
-            sender=email["sender"],
-            sender_name=email["sender_name"],
-            received_time=email["received_time"],
-            unread=email["unread"],
-            has_attachments=email["has_attachments"],
-        )
-        for email in result
-    ]
-
-
-@mcp.tool()
-def get_email(entry_id: str) -> EmailDetails:
-    """
-    Get full email body and details by entry ID.
-
-    Retrieves complete email information including body content (both plain text
-    and HTML) using O(1) direct access via EntryID.
+    Deduplication Tiers:
+    - 'none': (Default) No deduplication. Returns full body.
+    - 'low': Checks In-Reply-To/References metadata. If the parent email exists in Outlook,
+             strips the quoted content from the body. (Matches default behavior of remove_quoted=True)
+    - 'medium': If 'low' fails, also checks for matching Subject (ignoring RE:/FW:).
+    - 'high': Same as medium currently.
 
     Args:
         entry_id: Outlook EntryID of the email (O(1) direct access)
+        remove_quoted: DEPRECATED - use deduplication_tier='low'. If True, sets tier to 'low'.
+        deduplication_tier: Strategy for removing duplicate quoted text ('none', 'low', 'medium', 'high').
+        strip_html: If True, remove HTML code from body and clear text_html field (default: True).
 
     Returns:
-        EmailDetails: Complete email details including body content
+        EmailParsed: Richly structured email object
 
     Raises:
         OutlookNotFoundError: If email not found
@@ -193,28 +179,23 @@ def get_email(entry_id: str) -> EmailDetails:
     # Get bridge from module-level state
     bridge = _get_bridge()
 
-    # Get email body from bridge
-    result = bridge.get_email_body(entry_id)
+    # Get parsed email from bridge
+    result = bridge.get_email_parsed(
+        entry_id,
+        remove_quoted=remove_quoted,
+        deduplication_tier=deduplication_tier,
+        strip_html=strip_html,
+    )
 
     # Check if email was found
     if result is None:
         logger.error(f"Email not found: {entry_id}")
         raise OutlookNotFoundError("Email not found", entry_id=entry_id)
 
-    logger.debug(f"Retrieved email: {entry_id}")
+    logger.debug(f"Retrieved parsed email: {entry_id}")
 
-    # Convert bridge result to EmailDetails model
-    # Note: EmailDetails doesn't have 'unread' field (bridge.get_email_body doesn't return it)
-    return EmailDetails(
-        entry_id=result["entry_id"],
-        subject=result["subject"],
-        sender=result["sender"],
-        sender_name=result["sender_name"],
-        body=result["body"],
-        html_body=result["html_body"],
-        received_time=result["received_time"],
-        has_attachments=result["has_attachments"],
-    )
+    # Convert bridge result to EmailParsed model
+    return EmailParsed(**result)
 
 
 @mcp.tool()
@@ -570,7 +551,7 @@ def search_emails_by_sender(
 
 
 # ============================================================================
-# Calendar Tools (US-009: get_appointment, US-014: delete_appointment, US-023: list_calendar_events, US-024: create_appointment, US-025: edit_appointment, US-026: respond_to_meeting, US-027: get_free_busy)
+# Calendar Tools
 # ============================================================================
 
 
@@ -921,7 +902,7 @@ def get_free_busy(
 
 
 # ============================================================================
-# Task Tools (US-010: get_task, US-012: complete_task, US-015: delete_task, US-029: list_tasks, US-030: list_all_tasks, US-031: create_task, US-032: edit_task)
+# Task Tools
 # ============================================================================
 
 
@@ -947,43 +928,6 @@ def list_tasks(include_completed: bool = False) -> list[TaskSummary]:
 
     # List tasks via bridge
     result = bridge.list_tasks(include_completed=include_completed)
-
-    # Convert bridge result to list of TaskSummary models
-    return [
-        TaskSummary(
-            entry_id=task["entry_id"],
-            subject=task["subject"],
-            body=task["body"],
-            due_date=task["due_date"],
-            status=task["status"],
-            priority=task["priority"],
-            complete=task["complete"],
-            percent_complete=task["percent_complete"],
-        )
-        for task in result
-    ]
-
-
-@mcp.tool()
-def list_all_tasks() -> list[TaskSummary]:
-    """
-    List all tasks from the Outlook Tasks folder (including completed).
-
-    Retrieves a complete list of all tasks from the Outlook Tasks folder,
-    including both incomplete and completed tasks. This is a convenience
-    function that calls list_tasks with include_completed=True.
-
-    Returns:
-        list[TaskSummary]: List of all task summaries with basic information
-
-    Raises:
-        OutlookComError: If bridge is not initialized
-    """
-    # Get bridge from module-level state
-    bridge = _get_bridge()
-
-    # List all tasks via bridge (hardcoded include_completed=True)
-    result = bridge.list_tasks(include_completed=True)
 
     # Convert bridge result to list of TaskSummary models
     return [

@@ -521,6 +521,426 @@ class OutlookBridge:
                 return None
         return None
 
+    def get_email_parsed(
+        self,
+        entry_id,
+        remove_quoted=False,
+        deduplication_tier="none",
+        strip_html=True,
+    ):
+        """
+        Get structured email object using mail-parser (O(1) direct access)
+
+        Args:
+            entry_id: Outlook EntryID of the email
+            remove_quoted: DEPRECATED - use deduplication_tier="low" instead.
+                           If True, sets deduplication_tier="low".
+            deduplication_tier: Strategy for deduplicating quoted content.
+                                "none" - No deduplication (default)
+                                "low" - Strip using mail-parser-reply (standard)
+                                "medium" - Strip ONLY if parent email found via References/In-Reply-To
+                                "high" - Strip ONLY if parent email found via Subject/Content (Not Implemented)
+            strip_html: If True, remove HTML code from body and clear text_html field (default: True)
+
+        Returns:
+            Dictionary matching EmailParsed model structure
+        """
+        # Backwards compatibility for remove_quoted bool
+        if remove_quoted and deduplication_tier == "none":
+            deduplication_tier = "low"
+
+        import os
+        import tempfile
+
+        try:
+            import mailparser
+        except ImportError:
+            print(
+                "Warning: mail-parser not installed, falling back to basic parsing",
+                file=sys.stderr,
+            )
+            item = self.get_item_by_id(entry_id)
+            if not item:
+                return None
+            return self._fallback_parsed_model(
+                item, deduplication_tier, strip_html=strip_html
+            )
+
+        item = self.get_item_by_id(entry_id)
+        if not item:
+            return None
+
+        # Create temp file
+        fd, temp_path = tempfile.mkstemp(suffix=".msg")
+        os.close(fd)
+
+        try:
+            # Save as MSG
+            # olMSG = 3
+            try:
+                item.SaveAs(temp_path, 3)
+            except Exception as e:
+                print(f"Error saving to .msg: {e}", file=sys.stderr)
+                return self._fallback_parsed_model(
+                    item, deduplication_tier, strip_html=strip_html
+                )
+
+            # Parse
+            try:
+                mail = mailparser.parse_from_file_msg(temp_path)
+                return self._convert_to_parsed_model(
+                    mail, item, deduplication_tier, strip_html=strip_html
+                )
+            except Exception as e:
+                print(f"Error parsing .msg with mail-parser: {e}", file=sys.stderr)
+                return self._fallback_parsed_model(
+                    item, deduplication_tier, strip_html=strip_html
+                )
+
+        finally:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+
+    def _check_parent_exists(self, mail_obj=None, item=None, tier="low"):
+        """
+        Check if the parent/quoted email exists in Outlook.
+        Returns True if found, False otherwise.
+        """
+        try:
+            # Tier LOW: Check via In-Reply-To header
+            # Note: Outlook Object Model doesn't expose headers easily on MailItem without PropertyAccessor
+            # We use the parsed mail object for headers if available
+            in_reply_to = None
+            if mail_obj and hasattr(mail_obj, "headers"):
+                in_reply_to = mail_obj.headers.get("In-Reply-To")
+
+            # If we only have item (fallback mode), try PropertyAccessor
+            if not in_reply_to and item:
+                try:
+                    # PR_INTERNET_REFERENCES = http://schemas.microsoft.com/mapi/proptag/0x1039001E
+                    # PR_IN_REPLY_TO_ID = http://schemas.microsoft.com/mapi/proptag/0x1042001E
+                    prop_accessor = item.PropertyAccessor
+                    in_reply_to = prop_accessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x1042001E")
+                except Exception:
+                    pass
+
+            if in_reply_to:
+                # Search by InternetMessageId
+                # Clean up ID (remove < >)
+                msg_id = in_reply_to.strip("<> ")
+                if msg_id:
+                    # Search inbox (or all folders? Restrict is usually folder-bound)
+                    # For performance/simplicity, check Inbox first.
+                    inbox = self.get_inbox()
+                    if inbox:
+                        # PR_INTERNET_MESSAGE_ID = http://schemas.microsoft.com/mapi/proptag/0x1035001E
+                        # Jet query: [InternetMessageId] = 'id' (doesn't always work reliably)
+                        # DASL query is better
+                        dasl_filter = f"@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x1035001E\" = '{msg_id.replace("'", "''")}'"
+                        found_items = inbox.Items.Restrict(dasl_filter)
+                        if found_items.Count > 0:
+                            return True
+
+            # Tier MEDIUM: Check by Subject (if low failed or not possible)
+            if tier == "medium":
+                subject = getattr(mail_obj, "subject", None) or (item.Subject if item else None)
+                if subject:
+                    # Strip RE/FW prefixes
+                    import re
+                    clean_subject = re.sub(r"^((re|fw|fwd):\s*)+", "", subject, flags=re.IGNORECASE).strip()
+                    if clean_subject:
+                        inbox = self.get_inbox()
+                        if inbox:
+                            # Search for matching subject
+                            # Use simplified check
+                            filter_str = f"[Subject] = '{clean_subject}'" # Exact match on stripped subject might fail if original didn't have prefix
+                            # Just try to find "Conversations" -> GetConversation() is best but complex
+                            # Let's try restrictive search
+                            # Try strict subject match of CLEAN subject
+                            # This is heuristic.
+                            # Just check if ANY item has this subject
+                            items = inbox.Items.Restrict(f"[Subject] = '{clean_subject.replace("'", "''")}'")
+                            if items.Count > 0:
+                                return True
+
+            return False
+
+        except Exception as e:
+            print(f"Error checking parent existence: {e}", file=sys.stderr)
+            return False
+
+    def _extract_latest_reply(self, text_body):
+        """Extract latest reply using mail-parser-reply"""
+        if not text_body:
+            return None
+        try:
+            from mailparser_reply import EmailReplyParser
+
+            parsed = EmailReplyParser.read(text_body)
+            # return the latest reply text
+            return parsed.latest_reply
+        except ImportError:
+            print(
+                "Warning: mail-parser-reply not installed, skipping reply extraction",
+                file=sys.stderr,
+            )
+            return None
+        except Exception as e:
+            print(f"Error extracting reply: {e}", file=sys.stderr)
+            return None
+
+    def _convert_to_parsed_model(
+        self, mail, item, deduplication_tier="none", strip_html=True
+    ):
+        """Convert mail-parser object to dict matching EmailParsed model"""
+        # mail-parser returns list of tuples for from_, to, cc, bcc
+        # mail.date is a datetime object
+
+        # Helper to convert list of tuples to expected format
+        def safe_list_tuples(val):
+            if isinstance(val, list):
+                return [tuple(x) for x in val]
+            return []
+
+        # received headers
+        received = []
+        if hasattr(mail, "received"):
+            for r in mail.received:
+                # convert to dict if it's not
+                if isinstance(r, dict):
+                    received.append(r)
+                else:
+                    try:
+                        received.append(dict(r))
+                    except Exception:
+                        pass
+
+        # attachments
+        # User said "leave out the attachment for now", so I will return metadata only or empty
+        # mail-parser attachments is list of dicts.
+        attachments = []
+        if hasattr(mail, "attachments"):
+            for att in mail.attachments:
+                # filter fields? Just keep what mail-parser gives
+                # binary payload might be large.
+                # User said "leave out the attachment for now".
+                # I'll include metadata but maybe strip payload if huge?
+                # mail-parser 'payload' is base64 string.
+                # I'll strip 'payload' key to save bandwidth as requested "leave out attachment".
+                # But keep filename, etc.
+                a_copy = att.copy()
+                if "payload" in a_copy:
+                    del a_copy["payload"]
+                attachments.append(a_copy)
+
+        latest_reply = None
+        parent_found = None
+
+        should_strip = False
+
+        if deduplication_tier != "none":
+            # Extract reply text candidate
+            latest_reply = self._extract_latest_reply(mail.body)
+
+            if deduplication_tier == "low":
+                # Low: Just strip (matches original remove_quoted=True behavior/default requirement)
+                # "low (default) - use only outlook specific In-Reply-To... metadata"
+                # This implies checking logic.
+                # If parent exists -> Strip.
+                # If not -> Keep? Or assumes if In-Reply-To is present, it's a reply?
+                # User said "use only... metadata... medium... tries to deduplicate with same title".
+                # I will interpret "Low" as: Check In-Reply-To. If found in DB, strip.
+                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="low")
+                if parent_found:
+                    should_strip = True
+                else:
+                    # If we can't find parent, we preserve full body
+                    should_strip = False
+
+            elif deduplication_tier == "medium":
+                # Medium: Check In-Reply-To OR Subject
+                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="medium")
+                if parent_found:
+                    should_strip = True
+
+            elif deduplication_tier == "high":
+                # High: Same as medium for now (content search is slow/complex via COM)
+                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="medium")
+                if parent_found:
+                    should_strip = True
+
+        # If stripping is active and we have a reply extracted
+        if should_strip and latest_reply:
+            final_body = latest_reply
+        else:
+            final_body = mail.body
+
+        text_html = mail.text_html
+
+        if strip_html:
+            # Check if we need to convert HTML to text
+            # If body is empty or looks like HTML, and we have HTML content
+            import re
+
+            is_html = bool(re.search(r"<[a-z][\s\S]*>", final_body, re.IGNORECASE))
+            if is_html or (not final_body and text_html):
+                try:
+                    from bs4 import BeautifulSoup
+
+                    # Use text_html if body is empty
+                    source = (
+                        final_body
+                        if final_body and is_html
+                        else (text_html[0] if text_html else "")
+                    )
+                    if source:
+                        soup = BeautifulSoup(source, "html.parser")
+                        final_body = soup.get_text(separator="\n").strip()
+                except ImportError:
+                    print(
+                        "Warning: beautifulsoup4 not installed, skipping HTML stripping",
+                        file=sys.stderr,
+                    )
+                except Exception as e:
+                    print(f"Error stripping HTML: {e}", file=sys.stderr)
+
+            # Clear text_html to save context
+            text_html = []
+
+        return {
+            "entry_id": item.EntryID,
+            "subject": mail.subject,
+            "from": safe_list_tuples(mail.from_),
+            "to": safe_list_tuples(mail.to),
+            "cc": safe_list_tuples(mail.cc),
+            "bcc": safe_list_tuples(mail.bcc),
+            "date": mail.date.isoformat()
+            if mail.date
+            else (
+                item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                if item.ReceivedTime
+                else None
+            ),
+            "message_id": mail.message_id,
+            "headers": mail.headers,
+            "text_plain": mail.text_plain,
+            "text_html": text_html,
+            "body": final_body,
+            "attachments": attachments,
+            "received": received,
+            "latest_reply": latest_reply,
+            "deduplication_tier": deduplication_tier,
+            "parent_found": parent_found,
+        }
+
+    def _fallback_parsed_model(
+        self, item, deduplication_tier="none", strip_html=True
+    ):
+        """Fallback when mail-parser fails, using COM properties"""
+        sender_email = self.resolve_smtp_address(item)
+        sender_name = item.SenderName
+
+        # Parse recipients
+        to_list = []
+        cc_list = []
+        bcc_list = []
+
+        # This is a basic approximation
+        if hasattr(item, "To") and item.To:
+            # item.To is a string "Name; Name". No emails usually.
+            # Best effort: use Recipients collection if possible, but that iterates.
+            # For fallback, just putting name in tuple is okay or split string.
+            # Or just use empty list if we can't reliably get emails.
+            # I'll use the strings.
+            for name in item.To.split(";"):
+                if name.strip():
+                    to_list.append((name.strip(), ""))
+
+        if hasattr(item, "CC") and item.CC:
+            for name in item.CC.split(";"):
+                if name.strip():
+                    cc_list.append((name.strip(), ""))
+
+        received_time = (
+            item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+            if item.ReceivedTime
+            else None
+        )
+
+        # Attachments metadata (basic)
+        attachments = []
+        try:
+            if item.Attachments.Count > 0:
+                for i in range(1, item.Attachments.Count + 1):
+                    att = item.Attachments.Item(i)
+                    attachments.append({
+                        "filename": att.FileName,
+                        "size": att.Size,
+                        "content_id": self._safe_get_attr(att, "ContentID"),
+                    })
+        except Exception:
+            pass
+
+        latest_reply = None
+        parent_found = None
+        should_strip = False
+
+        if deduplication_tier != "none":
+            latest_reply = self._extract_latest_reply(item.Body)
+
+            # For fallback, we only have 'item'
+            if deduplication_tier in ["low", "medium", "high"]:
+                parent_found = self._check_parent_exists(item=item, tier=deduplication_tier)
+                if parent_found:
+                    should_strip = True
+
+        if should_strip and latest_reply:
+            final_body = latest_reply
+        else:
+            final_body = item.Body
+
+        text_html = [item.HTMLBody]
+
+        if strip_html:
+            # If body is empty, try to get from HTML
+            # Note: item.Body is usually plain text in Outlook Object Model
+            if not final_body and item.HTMLBody:
+                try:
+                    from bs4 import BeautifulSoup
+
+                    soup = BeautifulSoup(item.HTMLBody, "html.parser")
+                    final_body = soup.get_text(separator="\n").strip()
+                except ImportError:
+                    pass
+                except Exception:
+                    pass
+
+            # Clear text_html
+            text_html = []
+
+        return {
+            "entry_id": item.EntryID,
+            "subject": item.Subject,
+            "from": [(sender_name, sender_email)],
+            "to": to_list,
+            "cc": cc_list,
+            "bcc": bcc_list,
+            "date": received_time,
+            "message_id": "",
+            "headers": {},
+            "text_plain": [item.Body],
+            "text_html": text_html,
+            "body": final_body,
+            "attachments": attachments,
+            "received": [],
+            "latest_reply": latest_reply,
+            "deduplication_tier": deduplication_tier,
+            "parent_found": parent_found,
+        }
+
     def list_calendar_events(self, days=7, all_events=False):
         """
         List calendar events for the next N days

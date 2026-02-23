@@ -5,6 +5,8 @@ This module contains all Pydantic models for structured output from MCP tools.
 Models provide type safety, automatic schema generation, and descriptive field metadata.
 """
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 # ============================================================================
@@ -41,6 +43,56 @@ class EmailDetails(BaseModel):
         description="Received timestamp in 'YYYY-MM-DD HH:MM:SS' format or None",
     )
     has_attachments: bool = Field(description="Whether the email has attachments")
+
+
+class EmailParsed(BaseModel):
+    """
+    Richly structured email object similar to mail-parser output.
+    Provides detailed headers, body parts, and metadata.
+    """
+
+    entry_id: str = Field(description="Outlook EntryID for O(1) direct access")
+    subject: str = Field(description="Email subject")
+    from_: list[tuple[str, str]] = Field(
+        alias="from", description="List of (name, email) tuples for sender"
+    )
+    to: list[tuple[str, str]] = Field(
+        default=[], description="List of (name, email) tuples for recipients"
+    )
+    cc: list[tuple[str, str]] = Field(
+        default=[], description="List of (name, email) tuples for CC"
+    )
+    bcc: list[tuple[str, str]] = Field(
+        default=[], description="List of (name, email) tuples for BCC"
+    )
+    date: str | None = Field(description="Parsed date string")
+    message_id: str = Field(default="", description="Message-ID header")
+    headers: dict[str, Any] = Field(default={}, description="Full headers dictionary")
+    text_plain: list[str] = Field(
+        default=[], description="List of plain text body parts"
+    )
+    text_html: list[str] = Field(default=[], description="List of HTML body parts")
+    body: str = Field(
+        description="Combined plain text body (for backward compatibility)"
+    )
+    attachments: list[dict[str, Any]] = Field(
+        default=[], description="List of attachment metadata dicts"
+    )
+    received: list[dict[str, Any]] = Field(
+        default=[], description="Parsed received headers (hops)"
+    )
+    latest_reply: str | None = Field(
+        default=None,
+        description="Extracted latest reply content (if deduplication is active)",
+    )
+    deduplication_tier: str | None = Field(
+        default="none",
+        description="Deduplication strategy used (none, low, medium, high)",
+    )
+    parent_found: bool | None = Field(
+        default=None,
+        description="Whether the parent/quoted email was found in Outlook (for smart deduplication)",
+    )
 
 
 class SendEmailResult(BaseModel):
