@@ -27,6 +27,7 @@ import pytest
 try:
     from mailtool.bridge import OutlookBridge
 except ImportError:
+    # Mock for non-Windows environments to allow collection of tests
     OutlookBridge = None
 
 # =============================================================================
