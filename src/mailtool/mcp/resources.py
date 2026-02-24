@@ -198,7 +198,7 @@ def inbox_unread() -> str:
     bridge = _get_bridge()
 
     # Fetch only unread emails directly from bridge
-    unread_emails_data = bridge.search_emails("[Unread]=True", limit=50)
+    unread_emails_data = bridge.search_emails(unread=True, limit=50)
 
     # Convert to EmailSummary models
     emails = [

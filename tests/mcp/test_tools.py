@@ -58,6 +58,27 @@ def mock_bridge():
         "has_attachments": False,
     }
 
+    # Mock get_email_parsed for get_email tool
+    bridge.get_email_parsed.return_value = {
+        "entry_id": "email-123",
+        "subject": "Test Email",
+        "from": [("Test Sender", "test@example.com")],
+        "to": [("Recipient", "recipient@example.com")],
+        "cc": [],
+        "bcc": [],
+        "date": "2025-01-19 10:00:00",
+        "message_id": "msg-123",
+        "headers": {},
+        "text_plain": ["Test body"],
+        "text_html": ["<html>Test body</html>"],
+        "body": "Test body",
+        "attachments": [],
+        "received": [],
+        "latest_reply": None,
+        "deduplication_tier": "none",
+        "parent_found": False,
+    }
+
     bridge.send_email.return_value = "draft-entry-456"
     bridge.reply_email.return_value = True
     bridge.forward_email.return_value = True
@@ -209,7 +230,8 @@ class TestGetEmail:
         assert result.subject == "Test Email"
         assert result.entry_id == "email-123"
         assert result.body == "Test body"
-        mock_bridge.get_email_body.assert_called_once_with("email-123")
+        # get_email now uses get_email_parsed
+        mock_bridge.get_email_parsed.assert_called_once()
 
     def test_get_email_not_found(self, server_with_mock, mock_bridge):
         """Test get_email with invalid entry_id"""
@@ -217,7 +239,7 @@ class TestGetEmail:
 
         from mailtool.mcp.server import get_email
 
-        mock_bridge.get_email_body.return_value = None
+        mock_bridge.get_email_parsed.return_value = None
 
         # McpError requires ErrorData object, not string
         # This test will fail until server code is fixed
@@ -378,10 +400,17 @@ class TestSearchEmails:
         """Test searching emails"""
         from mailtool.mcp.server import search_emails
 
-        result = search_emails("[Subject] LIKE '%test%'", limit=100)
+        result = search_emails(subject="test", limit=100)
 
         assert isinstance(result, list)
-        mock_bridge.search_emails.assert_called_once()
+        mock_bridge.search_emails.assert_called_once_with(
+            subject="test",
+            sender=None,
+            body=None,
+            unread=None,
+            has_attachments=None,
+            limit=100,
+        )
 
 
 class TestSearchEmailsBySender:
@@ -424,48 +453,6 @@ class TestSearchEmailsBySender:
         assert isinstance(result, list)
         mock_bridge.search_by_sender.assert_called_once_with(
             sender_email="test@example.com", limit=50, folder="Archive"
-        )
-
-
-class TestListUnreadEmails:
-    """Test list_unread_emails tool"""
-
-    def test_list_unread_emails_default(self, server_with_mock, mock_bridge):
-        """Test list_unread_emails with default parameters"""
-        from mailtool.mcp.server import list_unread_emails
-
-        # Configure mock to return unread emails
-        mock_bridge.search_emails.return_value = [
-            {
-                "entry_id": "unread-123",
-                "subject": "Unread Email",
-                "sender": "unread@example.com",
-                "sender_name": "Unread Sender",
-                "received_time": "2025-01-19 10:00:00",
-                "unread": True,
-                "has_attachments": False,
-            }
-        ]
-
-        result = list_unread_emails()
-
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0].subject == "Unread Email"
-        assert result[0].entry_id == "unread-123"
-        mock_bridge.search_emails.assert_called_once_with(
-            filter_query="[Unread] = TRUE", limit=10
-        )
-
-    def test_list_unread_emails_with_limit(self, server_with_mock, mock_bridge):
-        """Test list_unread_emails with custom limit"""
-        from mailtool.mcp.server import list_unread_emails
-
-        result = list_unread_emails(limit=5)
-
-        assert isinstance(result, list)
-        mock_bridge.search_emails.assert_called_once_with(
-            filter_query="[Unread] = TRUE", limit=5
         )
 
 
@@ -671,19 +658,6 @@ class TestListTasks:
         mock_bridge.list_tasks.assert_called_once_with(include_completed=True)
 
 
-class TestListAllTasks:
-    """Test list_all_tasks tool"""
-
-    def test_list_all_tasks(self, server_with_mock, mock_bridge):
-        """Test list_all_tasks"""
-        from mailtool.mcp.server import list_all_tasks
-
-        result = list_all_tasks()
-
-        assert isinstance(result, list)
-        mock_bridge.list_tasks.assert_called_once_with(include_completed=True)
-
-
 class TestGetTask:
     """Test get_task tool"""
 
@@ -868,12 +842,12 @@ class TestToolRegistration:
     """Test that all tools are properly registered"""
 
     def test_all_tools_registered(self):
-        """Test that all 23 tools are registered on the server"""
+        """Test that all 22 tools are registered on the server"""
         from mailtool.mcp.server import mcp
 
         tools = mcp._tool_manager._tools
 
-        # Check tool count (23 tools expected)
+        # Check tool count (22 tools expected)
         assert len(tools) >= 20, f"Expected at least 20 tools, got {len(tools)}"
 
         # Verify expected tools are present
@@ -889,6 +863,7 @@ class TestToolRegistration:
             "move_email",
             "delete_email",
             "search_emails",
+            "search_emails_by_sender",
         }
 
         expected_calendar_tools = {
@@ -903,7 +878,6 @@ class TestToolRegistration:
 
         expected_task_tools = {
             "list_tasks",
-            "list_all_tasks",
             "create_task",
             "get_task",
             "edit_task",

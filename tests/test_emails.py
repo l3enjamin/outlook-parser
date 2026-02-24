@@ -162,13 +162,10 @@ class TestEmails:
         # Note: After deletion, get_item_by_id may return None or raise
         # behavior can vary, so we just check it's not the same item
 
-    def test_search_emails_by_subject(self, bridge, test_timestamp, cleanup_helpers):
-        """Test searching emails using Restriction filter"""
-        # Test searching for unread emails using a simple filter
-        # Note: Complex LIKE queries with DASL syntax may not work on all Outlook locales
-        # Using simple boolean filter which is more universally supported
-        filter_query = "[Unread] = TRUE"
-        results = bridge.search_emails(filter_query, limit=10)
+    def test_search_emails_unread(self, bridge, test_timestamp, cleanup_helpers):
+        """Test searching emails using Restriction filter (Unread)"""
+        # Test searching for unread emails using structured parameter
+        results = bridge.search_emails(unread=True, limit=10)
 
         assert isinstance(results, list)
         # Should find some unread emails (or return empty list if none)
@@ -177,6 +174,23 @@ class TestEmails:
             assert email["unread"] is True, (
                 "search_emails returned non-unread email when filtering for unread"
             )
+
+    def test_search_emails_subject(self, bridge, test_timestamp, cleanup_helpers):
+        """Test searching emails by subject"""
+        # Create an email first to find it
+        subject = f"{TEST_PREFIX}Search Subject {test_timestamp}"
+        entry_id = bridge.send_email(
+            to="test@example.com", subject=subject, body="Test body", save_draft=True
+        )
+
+        try:
+            # Search for it in Drafts
+            results = bridge.search_emails(subject=subject, limit=10, folder="Drafts")
+            assert isinstance(results, list)
+            assert len(results) >= 1
+            assert any(e["entry_id"] == entry_id for e in results)
+        finally:
+            cleanup_helpers["delete_drafts_by_prefix"](TEST_PREFIX)
 
     def test_move_email_to_folder(self, bridge, test_timestamp, cleanup_helpers):
         """Test moving an email to a different folder"""

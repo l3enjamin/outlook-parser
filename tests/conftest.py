@@ -11,6 +11,13 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from unittest.mock import MagicMock
+
+# Mock win32com and pythoncom for Linux tests
+if sys.platform != "win32":
+    sys.modules["win32com"] = MagicMock()
+    sys.modules["win32com.client"] = MagicMock()
+    sys.modules["pythoncom"] = MagicMock()
 
 # Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
