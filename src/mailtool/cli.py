@@ -203,11 +203,18 @@ def main() -> None:
     )
     search_parser.add_argument(
         "--query",
-        required=True,
-        help="SQL filter query (e.g., urn:schemas:httpmail:subject LIKE '%%keyword%%')",
+        required=False,
+        help="SQL filter query (Unsafe/Legacy). Use --subject/--sender/--body instead.",
     )
     search_parser.add_argument(
         "--limit", type=int, default=100, help="Max results to return"
+    )
+    search_parser.add_argument("--subject", help="Search subject")
+    search_parser.add_argument("--sender", help="Search sender")
+    search_parser.add_argument("--body", help="Search body")
+    search_parser.add_argument("--unread", action="store_true", help="Filter unread")
+    search_parser.add_argument(
+        "--has-attachments", action="store_true", help="Filter with attachments"
     )
 
     # Mark email command
@@ -475,7 +482,15 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "search":
-        emails = bridge.search_emails(args.query, limit=args.limit)
+        emails = bridge.search_emails(
+            filter_query=args.query,
+            limit=args.limit,
+            subject=args.subject,
+            sender=args.sender,
+            body=args.body,
+            unread=args.unread if args.unread else None,
+            has_attachments=args.has_attachments if args.has_attachments else None,
+        )
         print(json.dumps(emails, indent=2))
 
     elif args.command == "folders":

@@ -1840,22 +1840,28 @@ class OutlookBridge:
                 pass
         return False
 
-    def search_emails(self, filter_query, limit=100):
+    def _search_emails_raw(self, filter_query, limit=100, folder="Inbox"):
         """
-        Search emails using Outlook Restriction filter (O(1) search, no iteration)
+        Internal: Search emails using raw Outlook Restriction filter.
 
         Args:
             filter_query: SQL query string for filtering
             limit: Max results to return
+            folder: Folder to search in (default: Inbox)
 
         Returns:
             List of email dictionaries
         """
         try:
-            # Use get_inbox() directly to ensure correct account
-            folder = self.get_inbox()
+            # Get folder
+            if folder == "Inbox":
+                mail_folder = self.get_inbox()
+            else:
+                mail_folder = self.get_folder_by_name(folder)
+                if not mail_folder:
+                    mail_folder = self.get_inbox()
 
-            items = folder.Items
+            items = mail_folder.Items
             # Apply restriction filter
             items = items.Restrict(filter_query)
 
@@ -1890,6 +1896,73 @@ class OutlookBridge:
         except Exception as e:
             logger.error(f"Error searching emails: {e}")
             return []
+
+    def search_emails(
+        self,
+        filter_query=None,
+        limit=100,
+        subject=None,
+        sender=None,
+        body=None,
+        unread=None,
+        has_attachments=None,
+        folder="Inbox",
+    ):
+        """
+        Search emails using structured criteria.
+
+        Args:
+            filter_query: Raw SQL/DASL query (Unsafe, legacy support)
+            limit: Max results
+            subject: Subject substring to match
+            sender: Sender substring to match
+            body: Body substring to match
+            unread: Filter by unread status (True/False)
+            has_attachments: Filter by attachment presence (True/False)
+            folder: Folder to search in (default: Inbox)
+
+        Returns:
+            List of email dictionaries
+        """
+        if filter_query:
+            return self._search_emails_raw(filter_query, limit, folder=folder)
+
+        filters = []
+
+        if subject:
+            # Escape single quotes
+            safe_subject = subject.replace("'", "''")
+            filters.append(
+                f"@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{safe_subject}%'"
+            )
+
+        if body:
+            safe_body = body.replace("'", "''")
+            filters.append(
+                f"@SQL=\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_body}%'"
+            )
+
+        if sender:
+            # Match either name or email
+            safe_sender = sender.replace("'", "''")
+            filters.append(
+                f"(\"@SQL=\"urn:schemas:httpmail:fromname\" LIKE '%{safe_sender}%' OR "
+                f"\"urn:schemas:httpmail:fromemail\" LIKE '%{safe_sender}%'\")"
+            )
+
+        if unread is not None:
+            filters.append(f"[Unread] = {'True' if unread else 'False'}")
+
+        if has_attachments is not None:
+            filters.append(f"[HasAttachments] = {'True' if has_attachments else 'False'}")
+
+        query = " AND ".join(filters) if filters else ""
+
+        if not query:
+            # Just list recent emails if no filters provided
+            return self.list_emails(limit=limit, folder=folder)
+
+        return self._search_emails_raw(query, limit, folder=folder)
 
     def search_by_sender(self, sender_email, limit=100, folder="Inbox"):
         """

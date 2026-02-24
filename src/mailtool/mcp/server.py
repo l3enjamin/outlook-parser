@@ -174,7 +174,7 @@ def list_emails(
 
     if unread_only and folder == "Inbox":
         # Use optimized search for unread inbox emails
-        result = bridge.search_emails(filter_query="[Unread] = TRUE", limit=limit)
+        result = bridge.search_emails(unread=True, limit=limit)
     else:
         # For other folders or all emails, use standard list
         # Note: If unread_only is True for non-Inbox, we rely on post-filtering
@@ -510,19 +510,29 @@ def move_email(entry_id: str, folder: str) -> OperationResult:
 
 
 @mcp.tool()
-def search_emails(filter_query: str, limit: int = 100) -> list[EmailSummary]:
+def search_emails(
+    subject: str | None = None,
+    sender: str | None = None,
+    body: str | None = None,
+    unread: bool | None = None,
+    has_attachments: bool | None = None,
+    limit: int = 100,
+) -> list[EmailSummary]:
     """
-    Search emails using Outlook filter query.
+    Search emails using structured criteria.
 
     Searches emails in the Inbox using Outlook Restriction filter (O(1) search).
-    Supports SQL-like filter syntax for advanced queries.
+    Supports searching by subject, sender, body, and status flags.
 
     NOTE: For searching by sender email address, especially for internal/Exchange
-    users, use search_emails_by_sender() instead. The SenderEmailAddress filter
-    does not work for Exchange addresses (internal emails).
+    users, use search_emails_by_sender() instead.
 
     Args:
-        filter_query: SQL-like filter query string (e.g., "[Subject] LIKE '%meeting%'")
+        subject: Search substring in email subject
+        sender: Search substring in sender name or email address
+        body: Search substring in email body (plain text description)
+        unread: Filter by unread status (True for unread, False for read)
+        has_attachments: Filter by attachment presence
         limit: Maximum number of results to return (default: 100)
 
     Returns:
@@ -530,17 +540,19 @@ def search_emails(filter_query: str, limit: int = 100) -> list[EmailSummary]:
 
     Raises:
         OutlookComError: If bridge is not initialized
-
-    Examples:
-        search_emails("[Subject] LIKE '%project%'")  # Search by subject
-        search_emails("[Unread] = TRUE")  # Find unread emails
-        search_emails("[SenderName] LIKE '%John%'")  # Search by sender name (works better than email)
     """
     # Get bridge from module-level state
     bridge = _get_bridge()
 
     # Search emails via bridge
-    result = bridge.search_emails(filter_query=filter_query, limit=limit)
+    result = bridge.search_emails(
+        subject=subject,
+        sender=sender,
+        body=body,
+        unread=unread,
+        has_attachments=has_attachments,
+        limit=limit,
+    )
 
     # Convert bridge result to list of EmailSummary models
     return [
