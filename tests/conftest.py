@@ -17,7 +17,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 
-from mailtool.bridge import OutlookBridge
+try:
+    from mailtool.bridge import OutlookBridge
+except ImportError:
+    # Mock for non-Windows environments to allow collection of tests
+    OutlookBridge = None
 
 # =============================================================================
 # Test Configuration
