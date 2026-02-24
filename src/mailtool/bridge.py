@@ -21,11 +21,13 @@ Usage:
 # Modified to test pre-commit hook
 
 import contextlib
+import logging
 import sys
-import traceback
 from datetime import datetime, timedelta
 
 import win32com.client
+
+logger = logging.getLogger(__name__)
 
 
 class OutlookBridge:
@@ -65,14 +67,12 @@ class OutlookBridge:
             try:
                 self.outlook = win32com.client.Dispatch("Outlook.Application")
             except Exception:
-                print("Error: Could not connect to or launch Outlook.", file=sys.stderr)
-                print(f"Details: {e}", file=sys.stderr)
-                # output full traceback
-                print(
-                    "Hint: Make sure Outlook is installed and you can launch it manually.",
-                    file=sys.stderr,
+                logger.error("Could not connect to or launch Outlook.")
+                logger.error(f"Details: {e}")
+                logger.error(
+                    "Hint: Make sure Outlook is installed and you can launch it manually."
                 )
-                traceback.print_exc()
+                logger.exception("Full traceback:")
                 sys.exit(1)
 
         self.namespace = self.outlook.GetNamespace("MAPI")
@@ -230,7 +230,7 @@ class OutlookBridge:
         """
 
         def retrieve_folder_details(folder, parent_folder, depth):
-            print(f"{'  ' * depth}- {folder.Name} (Items: {folder.Items.Count})")
+            logger.info(f"{'  ' * depth}- {folder.Name} (Items: {folder.Items.Count})")
             all_items = []
             cur_folder_data = {
                 "name": folder.Name,
@@ -252,13 +252,13 @@ class OutlookBridge:
             try:
                 parent_folder = self.namespace.Folders.Item(i)
                 if acc_name and parent_folder.Name != acc_name:
-                    print(
+                    logger.info(
                         f"acc_name arg does not match found account: {parent_folder.Name}\n  skipping..."
                     )
                     continue
-                print(f"Account: {parent_folder.Name}")
+                logger.info(f"Account: {parent_folder.Name}")
             except Exception:
-                print(f"Finished listing accounts. Total accounts: {i - 1}")
+                logger.info(f"Finished listing accounts. Total accounts: {i - 1}")
                 break  # No more accounts
 
             final[parent_folder.Name] = retrieve_folder_details(parent_folder, None, 0)
@@ -555,9 +555,8 @@ class OutlookBridge:
         try:
             import mailparser
         except ImportError:
-            print(
-                "Warning: mail-parser not installed, falling back to basic parsing",
-                file=sys.stderr,
+            logger.warning(
+                "mail-parser not installed, falling back to basic parsing"
             )
             item = self.get_item_by_id(entry_id)
             if not item:
@@ -580,7 +579,7 @@ class OutlookBridge:
             try:
                 item.SaveAs(temp_path, 3)
             except Exception as e:
-                print(f"Error saving to .msg: {e}", file=sys.stderr)
+                logger.error(f"Error saving to .msg: {e}")
                 return self._fallback_parsed_model(
                     item, deduplication_tier, strip_html=strip_html
                 )
@@ -592,7 +591,7 @@ class OutlookBridge:
                     mail, item, deduplication_tier, strip_html=strip_html
                 )
             except Exception as e:
-                print(f"Error parsing .msg with mail-parser: {e}", file=sys.stderr)
+                logger.error(f"Error parsing .msg with mail-parser: {e}")
                 return self._fallback_parsed_model(
                     item, deduplication_tier, strip_html=strip_html
                 )
@@ -656,7 +655,6 @@ class OutlookBridge:
                         if inbox:
                             # Search for matching subject
                             # Use simplified check
-                            filter_str = f"[Subject] = '{clean_subject}'" # Exact match on stripped subject might fail if original didn't have prefix
                             # Just try to find "Conversations" -> GetConversation() is best but complex
                             # Let's try restrictive search
                             # Try strict subject match of CLEAN subject
@@ -669,7 +667,7 @@ class OutlookBridge:
             return False
 
         except Exception as e:
-            print(f"Error checking parent existence: {e}", file=sys.stderr)
+            logger.error(f"Error checking parent existence: {e}")
             return False
 
     def _extract_latest_reply(self, text_body):
@@ -683,13 +681,12 @@ class OutlookBridge:
             # return the latest reply text
             return parsed.latest_reply
         except ImportError:
-            print(
-                "Warning: mail-parser-reply not installed, skipping reply extraction",
-                file=sys.stderr,
+            logger.warning(
+                "mail-parser-reply not installed, skipping reply extraction"
             )
             return None
         except Exception as e:
-            print(f"Error extracting reply: {e}", file=sys.stderr)
+            logger.error(f"Error extracting reply: {e}")
             return None
 
     def _convert_to_parsed_model(
@@ -800,12 +797,11 @@ class OutlookBridge:
                         soup = BeautifulSoup(source, "html.parser")
                         final_body = soup.get_text(separator="\n").strip()
                 except ImportError:
-                    print(
-                        "Warning: beautifulsoup4 not installed, skipping HTML stripping",
-                        file=sys.stderr,
+                    logger.warning(
+                        "beautifulsoup4 not installed, skipping HTML stripping"
                     )
                 except Exception as e:
-                    print(f"Error stripping HTML: {e}", file=sys.stderr)
+                    logger.error(f"Error stripping HTML: {e}")
 
             # Clear text_html to save context
             text_html = []
@@ -1196,7 +1192,7 @@ class OutlookBridge:
                 mail.Send()
                 return True
         except Exception as e:
-            print(f"Error sending email: {e}", file=sys.stderr)
+            logger.error(f"Error sending email: {e}")
             return False
 
     def reply_email(self, entry_id, body, reply_all=False):
@@ -1231,7 +1227,7 @@ class OutlookBridge:
                 reply.Send()
                 return True
             except Exception as e:
-                print(f"Error replying to email: {e}", file=sys.stderr)
+                logger.error(f"Error replying to email: {e}")
                 return False
         return False
 
@@ -1265,7 +1261,7 @@ class OutlookBridge:
                 forward.Send()
                 return True
             except Exception as e:
-                print(f"Error forwarding email: {e}", file=sys.stderr)
+                logger.error(f"Error forwarding email: {e}")
                 return False
         return False
 
@@ -1308,13 +1304,13 @@ class OutlookBridge:
 
             target_folder = self.get_folder_by_name(folder_name)
             if not target_folder:
-                print(f"Error: Folder '{folder_name}' not found", file=sys.stderr)
+                logger.error(f"Folder '{folder_name}' not found")
                 return False
 
             item.Move(target_folder)
             return True
         except Exception as e:
-            print(f"Error moving email: {e}", file=sys.stderr)
+            logger.error(f"Error moving email: {e}")
             return False
 
     def delete_email(self, entry_id):
@@ -1374,9 +1370,8 @@ class OutlookBridge:
                 filepath = os.path.abspath(os.path.join(abs_download_dir, filename))
 
                 if not filepath.startswith(abs_download_dir):
-                    print(
-                        f"Warning: Skipping suspicious attachment filename: {raw_filename}",
-                        file=sys.stderr,
+                    logger.warning(
+                        f"Skipping suspicious attachment filename: {raw_filename}"
                     )
                     continue
 
@@ -1384,7 +1379,7 @@ class OutlookBridge:
                 downloaded.append(filepath)
             return downloaded
         except Exception as e:
-            print(f"Error downloading attachments: {e}", file=sys.stderr)
+            logger.error(f"Error downloading attachments: {e}")
             return []
 
     def create_appointment(
@@ -1437,7 +1432,7 @@ class OutlookBridge:
             appointment.Save()
             return appointment.EntryID
         except Exception as e:
-            print(f"Error creating appointment: {e}", file=sys.stderr)
+            logger.error(f"Error creating appointment: {e}")
             return None
 
     def edit_appointment(
@@ -1489,7 +1484,7 @@ class OutlookBridge:
                     return True
             return False
         except Exception as e:
-            print(f"Error editing appointment: {e}", file=sys.stderr)
+            logger.error(f"Error editing appointment: {e}")
             return False
 
     def get_appointment(self, entry_id):
@@ -1702,7 +1697,7 @@ class OutlookBridge:
             task.Save()
             return task.EntryID
         except Exception as e:
-            print(f"Error creating task: {e}", file=sys.stderr)
+            logger.error(f"Error creating task: {e}")
             return None
 
     def get_task(self, entry_id):
@@ -1800,7 +1795,7 @@ class OutlookBridge:
                 item.Save()
                 return True
             except Exception as e:
-                print(f"Error editing task: {e}", file=sys.stderr)
+                logger.error(f"Error editing task: {e}")
             pass
         return False
 
@@ -1893,7 +1888,7 @@ class OutlookBridge:
 
             return emails
         except Exception as e:
-            print(f"Error searching emails: {e}", file=sys.stderr)
+            logger.error(f"Error searching emails: {e}")
             return []
 
     def search_by_sender(self, sender_email, limit=100, folder="Inbox"):
@@ -1956,7 +1951,7 @@ class OutlookBridge:
 
             return emails
         except Exception as e:
-            print(f"Error searching emails by sender: {e}", file=sys.stderr)
+            logger.error(f"Error searching emails by sender: {e}")
             return []
 
     def get_free_busy(

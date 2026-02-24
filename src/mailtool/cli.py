@@ -9,6 +9,7 @@ ensuring users get helpful error messages when running on unsupported platforms.
 
 import argparse
 import json
+import logging
 import sys
 
 
@@ -88,6 +89,11 @@ def main() -> None:
     All commands return JSON output for machine readability.
     Exit code 1 indicates an error.
     """
+    # Configure logging to stderr to avoid interfering with JSON output on stdout
+    logging.basicConfig(
+        level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr
+    )
+
     # Platform check - must happen before any Windows-specific imports
     _check_platform()
 
