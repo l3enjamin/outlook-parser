@@ -1,50 +1,95 @@
 # Mailtool - Outlook Automation Bridge
 
-A Python library and CLI tool for accessing Outlook email, calendar, and tasks from WSL2 via Windows COM automation.
+A Python library and CLI tool for accessing Outlook email, calendar, and tasks via Windows COM automation. Optimized for use with AI agents via the Model Context Protocol (MCP).
 
 **Uses [uv](https://github.com/astral-sh/uv) for dependency management - no global Python needed!**
 
-## 🚀 Installation
+## 🚀 Getting Started
 
-### PyPI Installation (Recommended)
+### 1. Prerequisites
 
-```bash
-# Install via pip
-pip install mailtool
+- Windows with Outlook (classic) installed and running.
+- `uv` installed (`pip install uv` or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`).
 
-# Or via uv
-uv pip install mailtool
-```
+### 2. Installation
 
-### Claude Code Integration
-
-For Claude Code integration, install the [mailtool-plugin](https://github.com/utsmok/mailtool-plugin) package:
+Clone the repository and sync the dependencies:
 
 ```bash
-/plugin marketplace add utsmok/mailtool-plugin
-/plugin install mailtool
+git clone https://github.com/l3enjamin/outlook-parser.git
+cd outlook-parser
+uv sync
 ```
 
-This will configure the MCP server with 23 tools for email, calendar, and task management.
+### 3. Start Outlook
 
-## Prerequisites
+Ensure Outlook is running and logged into your account. The bridge communicates directly with the active Outlook process.
 
-- Windows with Outlook (classic) installed and running
-- `uv` installed (`pip install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+## 🤖 MCP Server Setup
 
-> **Note:** WSL2 is **not required**. This tool works natively on Windows. The WSL2 integration (via `outlook.sh`) is provided for users who prefer running their development tools in a containerized Linux environment while bridging to their Windows Outlook instance.
+This project includes a Model Context Protocol (MCP) server powered by the official Python SDK and FastMCP.
 
-## Setup
+### Workspace Configuration (Gemini CLI)
 
-### 1. Start Outlook
+To use this bridge in your AI workspace, create a `.gemini/mcp.json` file in your project root. 
 
-Make sure Outlook is running and logged into your account.
+**Requirements:**
+- `--account`: You MUST provide your Outlook email address or account name.
+- Feature Flags: You MUST explicitly enable modules using `--mail`, `--calendar`, or `--tasks`.
+- Permissions: By default, the server is **read-only**. Use `--rw` to enable write operations (sending, deleting, creating).
 
-### 2. That's it!
+```json
+{
+  "mcpServers": {
+    "mailtool": {
+      "command": "uv",
+      "args": [
+        "run",
+        "mailtool",
+        "mcp",
+        "--account", "your-email@example.com",
+        "--mail",
+        "--calendar",
+        "--tasks",
+        "--rw"
+      ]
+    }
+  }
+}
+```
 
-Dependencies are managed automatically by `uv`. No manual pip installs needed.
+### Manual Execution
 
-## Usage
+Run the MCP server directly from the terminal (replace with your email):
+
+```bash
+# Enable everything with write access
+uv run mailtool mcp --account your-email@example.com --mail --calendar --tasks --rw
+
+# Enable only mail in read-only mode
+uv run mailtool mcp --account your-email@example.com --mail
+```
+
+## 🛠️ Usage
+
+### As a CLI Tool
+
+```bash
+# List recent emails
+uv run mailtool emails --limit 5
+
+# Search emails from a specific sender
+uv run mailtool search --sender "John Doe"
+
+# List calendar events for next 7 days
+uv run mailtool calendar --days 7
+
+# Get specific email body
+uv run mailtool email --id <entry_id>
+
+# List active tasks
+uv run mailtool tasks
+```
 
 ### As a Python Library
 
@@ -58,73 +103,18 @@ bridge = OutlookBridge()
 emails = bridge.list_emails(limit=5)
 for email in emails:
     print(f"{email['subject']}: {email['sender']}")
-
-# Create appointment
-entry_id = bridge.create_appointment(
-    subject="Team Meeting",
-    start="2025-01-20 14:00:00",
-    end="2025-01-20 15:00:00",
-    location="Room 101"
-)
 ```
-
-### As a CLI Tool
-
-```bash
-# List recent emails
-mailtool emails --limit 5
-
-# List calendar events for next 7 days
-mailtool calendar --days 7
-
-# Get specific email body (use entry_id from emails command)
-mailtool email --id <entry_id>
-
-# Get parsed email object (with detailed headers and structure)
-mailtool parsed-email --id <entry_id>
-
-# Get parsed email with quoted replies removed (extract latest reply only)
-mailtool parsed-email --id <entry_id> --remove-quoted
-
-# Get parsed email with specific deduplication tier (none, low, medium, high)
-# Note: By default, HTML content is stripped from the body to save context.
-# Use --no-strip-html to preserve HTML.
-mailtool parsed-email --id <entry_id> --tier medium
-```
-
-### As an MCP Server (for Claude Code)
-
-See the [mailtool-plugin](https://github.com/utsmok/mailtool-plugin) repository for Claude Code integration instructions.
-
-#### Read-Only Mode
-
-You can run the MCP server in a restricted read-only mode that only allows searching and reading emails. This mode disables all modification tools (sending, deleting, marking as read, etc.) and all calendar/task management tools.
-
-To enable read-only mode, add the `--search-read-only` flag when starting the server:
-
-```bash
-uv run --with pywin32 -m mailtool.mcp.server --search-read-only
-```
-
-In this mode, only the following tools are available:
-- `list_emails`
-- `get_email`
-- `search_emails`
-- `search_emails_by_sender`
-
-And only the following resource is available:
-- `inbox://emails`
 
 ## How It Works
 
 The library uses Windows COM automation to communicate with Outlook:
 
-1. Python creates a COM object to access the running Outlook instance
-2. Uses O(1) direct lookups via `GetItemFromID()` for performance
-3. Returns structured data (emails, calendar events, tasks) as Python dictionaries
-4. MCP server mode exposes this functionality via JSON-RPC for AI agents
+1. Python creates a COM object to access the running Outlook instance.
+2. Uses O(1) direct lookups via `GetItemFromID()` for high performance even with large mailboxes.
+3. Returns structured data (emails, calendar events, tasks) as Python dictionaries or Pydantic models.
+4. MCP server mode exposes this functionality via JSON-RPC for AI agents.
 
-Project Structure
+## Project Structure
 
 ```
 mailtool/
@@ -142,159 +132,25 @@ mailtool/
 │           ├── resources.py # 5 resources
 │           ├── com_state.py # Thread-safe COM state management
 │           └── exceptions.py # Custom exceptions
-├── tests/
-│   ├── conftest.py         # Test fixtures
-│   ├── test_bridge.py      # Core connectivity tests
-│   ├── test_emails.py      # Email operation tests
-│   ├── test_calendar.py    # Calendar operation tests
-│   ├── test_tasks.py       # Task operation tests
-│   └── mcp/                # MCP server tests
-│       ├── test_models.py      # Pydantic model tests
-│       ├── test_tools.py       # Tool implementation tests
-│       ├── test_resources.py   # Resource tests
-│       ├── test_integration.py # End-to-end workflow tests
-│       └── test_exceptions.py  # Exception class tests
-└── .github/
-    └── workflows/
-        ├── ci.yml          # Continuous Integration
-        └── publish.yml     # PyPI publishing
+└── tests/
+    ├── conftest.py         # Test fixtures
+    ├── test_bridge.py      # Core connectivity tests
+    ├── test_emails.py      # Email operation tests
+    └── mcp/                # MCP server tests
 ```
 
 ## Advantages
 
-- ✅ **uv for dependencies** - No global Python pollution
-- ✅ **Official MCP SDK v2** - Type-safe, well-documented, maintainable
-- ✅ **Structured output** - Pydantic models for all tool results
-- ✅ **5 Resources** - Quick data access without tool calls
-- ✅ **No API registration** - Uses existing Outlook auth
-- ✅ **Works with any Outlook account**
-- ✅ **Full access** to email, calendar, and tasks
-- ✅ **Stable** - Doesn't break on UI changes
-- ✅ **Cross-shell** - Works from WSL2, PowerShell, etc.
-
-## Limitations
-
-- ⚠️ Outlook must be running on Windows
-- ⚠️ Windows-specific (COM automation)
-- ⚠️ MCP server requires Windows with Outlook (works from WSL2/Linux clients)
-
-## Claude Code Integration (MCP)
-
-**NEW: v2.3.0 - Now powered by MCP Python SDK v2 with FastMCP framework!**
-
-This includes a Model Context Protocol (MCP) server for Claude Code integration using the official MCP Python SDK v2 and FastMCP framework.
-
-### Key Features
-
-- **23 Tools** for email, calendar, and task management
-- **Structured Email Parsing** - `get_email` tool now returns detailed objects similar to `mail-parser` (headers, body parts, metadata). Automatically strips HTML by default to save context.
-- **5 Resources** for quick data access (inbox, calendar, tasks)
-- **Structured Output** - All tools return typed Pydantic models
-- **Type Safety** - Full type annotations for better IDE support
-- **Error Handling** - Custom exception classes with detailed error messages
-- **Logging** - Comprehensive logging for debugging and monitoring
-- **Zero-Config** - Uses `uv run --with pywin32` for dependency-free execution
-
-### Manual Installation
-
-If you prefer manual installation or want to contribute:
-
-```bash
-# Clone the repository
-git clone https://github.com/utsmok/mailtool.git
-cd mailtool
-
-# Install in editable mode
-uv pip install -e .
-```
-
-Then Claude Code can:
-- 📧 Read, send, reply to, forward, move, search, and manage emails
-- 📅 View, create, edit, respond to meetings, check free/busy, and manage appointments
-- ✅ Create, edit, complete, delete, and manage tasks
-
-### MCP Server Architecture
-
-**Version 2.3.0** uses the official MCP Python SDK v2 with FastMCP framework:
-
-```
-Claude Code (WSL2/Linux)
-    ↓ (JSON-RPC via stdio)
-FastMCP Server (mailtool.mcp.server)
-    ↓ (async context manager)
-Outlook COM Bridge (thread pool executor)
-    ↓ (COM)
-Outlook Application
-```
-
-**Key improvements from v2.2:**
-- ✅ Official MCP SDK v2 (mcp>=0.9.0) with FastMCP framework
-- ✅ Structured Pydantic models for all tool outputs (EmailDetails, AppointmentDetails, TaskSummary, etc.)
-- ✅ 5 resources for quick data access (inbox://emails, calendar://today, tasks://active, etc.)
-- ✅ Custom exception classes (OutlookNotFoundError, OutlookComError, OutlookValidationError)
-- ✅ Comprehensive logging for debugging and monitoring
-- ✅ Type-safe tool definitions with @mcp.tool() decorator
-- ✅ Async lifespan management for COM bridge lifecycle
-
-See [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for full documentation.
-
-### Available MCP Tools
-
-**Email (10 tools)**: `list_emails`, `get_email`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`, `search_emails_by_sender`
-
-**Calendar (7 tools)**: `list_calendar_events`, `create_appointment`, `get_appointment`, `edit_appointment`, `respond_to_meeting`, `delete_appointment`, `get_free_busy`
-
-**Tasks (6 tools)**: `list_tasks`, `create_task`, `get_task`, `edit_task`, `complete_task`, `delete_task`
-
-### Available MCP Resources
-
-**Email Resources (2)**: `inbox://emails`, `email://{entry_id}`
-
-**Calendar Resources (2)**: `calendar://today`, `calendar://week`
-
-**Task Resources (1)**: `tasks://active`
-
-## Future Directions
-
-This could become:
-- **CLI Tool**: Full-featured email/calendar CLI
-- **Web App**: Backend for a web interface
-- **Library**: Importable Python module
-
-## Troubleshooting
-
-### "Could not connect to Outlook"
-- Make sure Outlook is running
-- Check that you're logged into your account
-
-### "uv.exe not found"
-- Install uv on Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-- Make sure uv is in your Windows PATH
-
-### UNC path warnings (harmless)
-- These appear because of WSL2 → Windows path translation
-- Safe to ignore, everything still works
-
-### MCP tools not available after plugin installation
-- This may be due to [Claude Code Bug #16143](https://github.com/anthropics/claude-code/issues/16143)
-- The MCP server is configured in `.mcp.json` (not inline in `plugin.json`) to work around this issue
-- Try restarting Claude Code after plugin installation
-- Verify the plugin installed correctly: `/plugin list`
-- Check MCP server status: `/mcp`
+- ✅ **uv for dependencies** - No global Python pollution.
+- ✅ **Official MCP SDK v2** - Type-safe, declarative, and maintainable.
+- ✅ **Structured output** - Pydantic models for all tool results.
+- ✅ **Secure by Default** - Defaults to read-only; requires explicit opt-in for modules.
+- ✅ **No API registration** - Uses your local Outlook authentication.
+- ✅ **O(1) Access** - Fast performance via EntryID lookups.
 
 ## Development
 
 ```bash
-# Add new dependencies
-uv add <package>
-
-# Run on Linux/WSL2 (for tooling)
-uv run python <script>
-
-# Run on Windows (for COM automation)
-# Use direct python execution or uv run
-uv run --with pywin32 -m mailtool.cli <command>
-
 # Run tests
 uv run pytest
 
@@ -303,27 +159,10 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-### MCP Server Development
-
-The MCP server is implemented in `src/mailtool/mcp/` using the official MCP Python SDK v2:
-
-- **server.py** - FastMCP server with 23 tools
-- **models.py** - Pydantic models for structured output
-- **lifespan.py** - Async context manager for COM bridge lifecycle
-- **resources.py** - 5 resources for quick data access
-- **exceptions.py** - Custom exception classes
-
-See [CLAUDE.md](CLAUDE.md) for development patterns and architecture.
-
 ### Performance Benchmarks
 
-Performance benchmarks are available in `scripts/benchmarks/` for validating MCP server performance:
+Performance benchmarks are available in `scripts/benchmarks/` (requires Windows with Outlook running):
 
 ```bash
-# Run performance benchmarks (requires Windows with Outlook running)
 uv run --with pytest --with pywin32 python -m scripts.benchmarks.performance_benchmark
 ```
-
-**Note:** Benchmarks require Windows with Outlook running and pywin32 installed. They cannot run in WSL2 or CI/CD environments without Outlook access.
-
-See [scripts/benchmarks/README.md](scripts/benchmarks/README.md) for benchmark documentation and [scripts/benchmarks/EXPECTED_RESULTS.md](scripts/benchmarks/EXPECTED_RESULTS.md) for expected output format and success criteria.

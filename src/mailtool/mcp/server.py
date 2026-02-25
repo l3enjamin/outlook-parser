@@ -62,26 +62,8 @@ mcp = FastMCP(
 _bridge: "OutlookBridge | None" = None
 
 
-# Constants for read-only mode
-READ_ONLY_TOOLS = {
-    "list_emails",
-    "get_email",
-    "search_emails",
-    "search_emails_by_sender",
-}
-
-READ_ONLY_RESOURCES = {
-    "inbox://emails",
-}
-
-READ_ONLY_RESOURCE_TEMPLATES = {
-    "email://{entry_id}",
-}
-
-# Complete set of all tools registered by this module.
-# Used by configure_read_only_mode() to remove non-read-only tools via the
-# public remove_tool() API without accessing FastMCP private internals.
-ALL_TOOLS = {
+# Constants for module tools
+MAIL_TOOLS = {
     "list_emails",
     "get_email",
     "mark_email",
@@ -92,6 +74,9 @@ ALL_TOOLS = {
     "move_email",
     "search_emails",
     "search_emails_by_sender",
+}
+
+CALENDAR_TOOLS = {
     "list_calendar_events",
     "get_appointment",
     "delete_appointment",
@@ -99,6 +84,9 @@ ALL_TOOLS = {
     "edit_appointment",
     "respond_to_meeting",
     "get_free_busy",
+}
+
+TASK_TOOLS = {
     "list_tasks",
     "get_task",
     "complete_task",
@@ -107,19 +95,72 @@ ALL_TOOLS = {
     "edit_task",
 }
 
+# Constants for read-only tools across all modules
+READ_ONLY_TOOLS = {
+    "list_emails",
+    "get_email",
+    "search_emails",
+    "search_emails_by_sender",
+    "list_calendar_events",
+    "get_appointment",
+    "get_free_busy",
+    "list_tasks",
+    "get_task",
+}
 
-def configure_read_only_mode(mcp_instance: FastMCP) -> None:
-    """Configure the MCP server for read-only mode (search and read emails only).
+# Complete set of all tools registered by this module.
+ALL_TOOLS = MAIL_TOOLS | CALENDAR_TOOLS | TASK_TOOLS
 
-    Removes all tools except those in READ_ONLY_TOOLS using the public
-    remove_tool() API. Resources are registered conditionally in main(),
-    so no resource teardown is needed here.
+
+def configure_server_features(
+    mcp_instance: FastMCP,
+    enable_mail: bool = False,
+    enable_calendar: bool = False,
+    enable_tasks: bool = False,
+    is_rw: bool = False,
+) -> None:
+    """Configure the MCP server tools and resources based on enabled features.
+
+    Removes tools that belong to disabled modules or are write-operations
+    when the server is in read-only mode.
     """
-    logger.info("Configuring read-only mode (search and read emails only)")
+    tools_to_keep = set()
 
-    for tool_name in ALL_TOOLS - READ_ONLY_TOOLS:
-        logger.info(f"Removing tool in read-only mode: {tool_name}")
-        mcp_instance.remove_tool(tool_name)
+    if enable_mail:
+        tools_to_keep.update(MAIL_TOOLS)
+    if enable_calendar:
+        tools_to_keep.update(CALENDAR_TOOLS)
+    if enable_tasks:
+        tools_to_keep.update(TASK_TOOLS)
+
+    # If not in RW mode, only keep read-only tools
+    if not is_rw:
+        logger.info("Configuring read-only mode (write operations disabled)")
+        tools_to_keep &= READ_ONLY_TOOLS
+
+    # Identify tools to remove
+    tools_to_remove = ALL_TOOLS - tools_to_keep
+
+    for tool_name in tools_to_remove:
+        logger.debug(f"Removing tool: {tool_name}")
+        try:
+            mcp_instance.remove_tool(tool_name)
+        except KeyError:
+            # Tool might already be removed or not registered
+            pass
+
+    # Register resources for enabled modules
+    if enable_mail:
+        register_email_resources(mcp_instance)
+    if enable_calendar:
+        register_calendar_resources(mcp_instance)
+    if enable_tasks:
+        register_task_resources(mcp_instance)
+
+    logger.info(
+        f"Server configured: mail={enable_mail}, calendar={enable_calendar}, "
+        f"tasks={enable_tasks}, rw={is_rw}"
+    )
 
 
 def _get_bridge():
@@ -1247,19 +1288,22 @@ def main(default_account: str | None = None):
     """
     global _default_account
 
-    read_only = False
+    enable_mail = False
+    enable_calendar = False
+    enable_tasks = False
+    is_rw = False
 
-    # If default_account is provided directly, use it
+    # If default_account is provided directly, use it (usually from CLI bridge)
     # Otherwise, parse CLI arguments
     if default_account is None:
-        # Parse CLI arguments for default account
+        # Parse CLI arguments
         parser = argparse.ArgumentParser(
             description="Mailtool MCP Server - Outlook automation via MCP",
             epilog=(
                 "Examples:\n"
-                "  uv run --with pywin32 -m mailtool.mcp.server\n"
-                "  uv run --with pywin32 -m mailtool.mcp.server --account 'john@example.com'\n"
-                "  uv run --with pywin32 -m mailtool.mcp.server --acc 'john@example.com'\n"
+                "  uv run mailtool mcp --account 'john@example.com' --mail\n"
+                "  uv run mailtool mcp --account 'john@example.com' --mail --rw\n"
+                "  uv run mailtool mcp --account 'john@example.com' --mail --calendar --tasks --rw\n"
             ),
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -1267,31 +1311,45 @@ def main(default_account: str | None = None):
             "--account",
             "--acc",
             dest="account",
-            help="Default account name or email address for Outlook operations",
+            required=True,
+            help="REQUIRED: Default account name or email address for Outlook operations",
         )
         parser.add_argument(
-            "--search-read-only",
+            "--mail",
             action="store_true",
-            help="Restrict tools to search and read emails only (no modification, no calendar/tasks)",
+            help="Enable email tools and resources",
+        )
+        parser.add_argument(
+            "--calendar",
+            action="store_true",
+            help="Enable calendar tools and resources",
+        )
+        parser.add_argument(
+            "--tasks",
+            action="store_true",
+            help="Enable task tools and resources",
+        )
+        parser.add_argument(
+            "--rw",
+            action="store_true",
+            help="Enable write operations (default is read-only)",
         )
 
         args = parser.parse_args()
         default_account = args.account
-        read_only = args.search_read_only
+        enable_mail = args.mail
+        enable_calendar = args.calendar
+        enable_tasks = args.tasks
+        is_rw = args.rw
 
-    # Register resources conditionally to avoid touching FastMCP private internals.
-    # In read-only mode only email resources are registered; calendar and task
-    # resources are never created so there is nothing to tear down.
-    if read_only:
-        register_email_resources(mcp)
-    else:
-        register_email_resources(mcp)
-        register_calendar_resources(mcp)
-        register_task_resources(mcp)
-
-    # Apply read-only mode if requested (removes non-read-only tools via public API)
-    if read_only:
-        configure_read_only_mode(mcp)
+    # Configure server features (tools and resources)
+    configure_server_features(
+        mcp,
+        enable_mail=enable_mail,
+        enable_calendar=enable_calendar,
+        enable_tasks=enable_tasks,
+        is_rw=is_rw,
+    )
 
     # Set the global default account that the lifespan will read
     _default_account = default_account
