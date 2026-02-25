@@ -9,9 +9,9 @@ A WSL2-to-Windows bridge for Outlook automation via COM, optimized for AI agent 
 **Stack**: Python 3.13+ + pywin32 (COM) → Outlook (Windows)
 
 **Entry Points**:
-- `outlook.sh` (WSL2) → `outlook.bat` (Windows) → `src/mailtool/bridge.py`
-- `run_tests.sh` (WSL2) → `run_tests.bat` (Windows) → `pytest`
-- **MCP Server** → `src/mailtool/mcp/server.py` → Claude Code integration (26 tools, 7 resources)
+- `uv run --with pywin32 -m mailtool.cli` (CLI)
+- `uv run pytest` (Tests)
+- **MCP Server** → `src/mailtool/mcp/server.py` → Claude Code integration (23 tools, 5 resources)
 
 **Dependency Management**: Uses `uv run --with pywin32` for zero-install Windows execution
 

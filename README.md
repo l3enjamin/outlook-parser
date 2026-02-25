@@ -124,7 +124,7 @@ The library uses Windows COM automation to communicate with Outlook:
 3. Returns structured data (emails, calendar events, tasks) as Python dictionaries
 4. MCP server mode exposes this functionality via JSON-RPC for AI agents
 
-## Project Structure
+Project Structure
 
 ```
 mailtool/
@@ -132,7 +132,7 @@ mailtool/
 ├── src/
 │   └── mailtool/
 │       ├── __init__.py
-│       ├── bridge.py       # Core COM automation (~1100 lines)
+│       ├── bridge.py       # Core COM automation (~2100 lines)
 │       ├── cli.py          # CLI interface
 │       └── mcp/            # MCP Server (SDK v2 + FastMCP)
 │           ├── __init__.py
@@ -140,6 +140,7 @@ mailtool/
 │           ├── models.py   # Pydantic models
 │           ├── lifespan.py # Async COM bridge lifecycle
 │           ├── resources.py # 5 resources
+│           ├── com_state.py # Thread-safe COM state management
 │           └── exceptions.py # Custom exceptions
 ├── tests/
 │   ├── conftest.py         # Test fixtures
@@ -153,7 +154,6 @@ mailtool/
 │       ├── test_resources.py   # Resource tests
 │       ├── test_integration.py # End-to-end workflow tests
 │       └── test_exceptions.py  # Exception class tests
-├── docs/                   # Documentation
 └── .github/
     └── workflows/
         ├── ci.yml          # Continuous Integration
@@ -238,6 +238,22 @@ Outlook Application
 
 See [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for full documentation.
 
+### Available MCP Tools
+
+**Email (10 tools)**: `list_emails`, `get_email`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`, `search_emails_by_sender`
+
+**Calendar (7 tools)**: `list_calendar_events`, `create_appointment`, `get_appointment`, `edit_appointment`, `respond_to_meeting`, `delete_appointment`, `get_free_busy`
+
+**Tasks (6 tools)**: `list_tasks`, `create_task`, `get_task`, `edit_task`, `complete_task`, `delete_task`
+
+### Available MCP Resources
+
+**Email Resources (2)**: `inbox://emails`, `email://{entry_id}`
+
+**Calendar Resources (2)**: `calendar://today`, `calendar://week`
+
+**Task Resources (1)**: `tasks://active`
+
 ## Future Directions
 
 This could become:
@@ -276,10 +292,11 @@ uv add <package>
 uv run python <script>
 
 # Run on Windows (for COM automation)
-./outlook.sh <command>
+# Use direct python execution or uv run
+uv run --with pywin32 -m mailtool.cli <command>
 
 # Run tests
-./run_tests.sh
+uv run pytest
 
 # Run linter and formatter
 uv run ruff check .
