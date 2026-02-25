@@ -55,10 +55,8 @@ mcp = FastMCP(
     lifespan=outlook_lifespan,
 )
 
-# Register resources
-register_email_resources(mcp)
-register_calendar_resources(mcp)
-register_task_resources(mcp)
+# NOTE: Resources are registered in main() to support conditional read-only mode
+# without touching FastMCP private internals.
 
 # Module-level bridge instance (set by lifespan, accessed by tools)
 _bridge: "OutlookBridge | None" = None
@@ -80,46 +78,48 @@ READ_ONLY_RESOURCE_TEMPLATES = {
     "email://{entry_id}",
 }
 
+# Complete set of all tools registered by this module.
+# Used by configure_read_only_mode() to remove non-read-only tools via the
+# public remove_tool() API without accessing FastMCP private internals.
+ALL_TOOLS = {
+    "list_emails",
+    "get_email",
+    "mark_email",
+    "delete_email",
+    "send_email",
+    "reply_email",
+    "forward_email",
+    "move_email",
+    "search_emails",
+    "search_emails_by_sender",
+    "list_calendar_events",
+    "get_appointment",
+    "delete_appointment",
+    "create_appointment",
+    "edit_appointment",
+    "respond_to_meeting",
+    "get_free_busy",
+    "list_tasks",
+    "get_task",
+    "complete_task",
+    "delete_task",
+    "create_task",
+    "edit_task",
+}
+
 
 def configure_read_only_mode(mcp_instance: FastMCP) -> None:
     """Configure the MCP server for read-only mode (search and read emails only).
 
-    Removes all tools and resources except those explicitly allowed for searching
-    and reading emails. This removes ability to send/reply/forward emails,
-    manage calendar, or manage tasks.
+    Removes all tools except those in READ_ONLY_TOOLS using the public
+    remove_tool() API. Resources are registered conditionally in main(),
+    so no resource teardown is needed here.
     """
     logger.info("Configuring read-only mode (search and read emails only)")
 
-    # Filter tools
-    # Access private _tool_manager._tools dict keys to iterate
-    # We use list() to create a copy of keys since we modify the dict
-    tool_manager = mcp_instance._tool_manager
-    registered_tools = list(tool_manager._tools.keys())
-
-    for tool_name in registered_tools:
-        if tool_name not in READ_ONLY_TOOLS:
-            logger.info(f"Removing tool in read-only mode: {tool_name}")
-            mcp_instance.remove_tool(tool_name)
-
-    # Filter resources
-    # Access private _resource_manager._resources dict
-    # There is no public remove_resource API in FastMCP currently
-    resource_manager = mcp_instance._resource_manager
-    registered_resources = list(resource_manager._resources.keys())
-
-    for resource_uri in registered_resources:
-        if resource_uri not in READ_ONLY_RESOURCES:
-             logger.info(f"Removing resource in read-only mode: {resource_uri}")
-             del resource_manager._resources[resource_uri]
-
-    # Filter resource templates
-    # Access private _resource_manager._templates dict
-    registered_templates = list(resource_manager._templates.keys())
-
-    for template_uri in registered_templates:
-        if template_uri not in READ_ONLY_RESOURCE_TEMPLATES:
-            logger.info(f"Removing resource template in read-only mode: {template_uri}")
-            del resource_manager._templates[template_uri]
+    for tool_name in ALL_TOOLS - READ_ONLY_TOOLS:
+        logger.info(f"Removing tool in read-only mode: {tool_name}")
+        mcp_instance.remove_tool(tool_name)
 
 
 def _get_bridge():
@@ -1247,6 +1247,8 @@ def main(default_account: str | None = None):
     """
     global _default_account
 
+    read_only = False
+
     # If default_account is provided directly, use it
     # Otherwise, parse CLI arguments
     if default_account is None:
@@ -1275,10 +1277,21 @@ def main(default_account: str | None = None):
 
         args = parser.parse_args()
         default_account = args.account
+        read_only = args.search_read_only
 
-        # Apply read-only mode if requested
-        if args.search_read_only:
-            configure_read_only_mode(mcp)
+    # Register resources conditionally to avoid touching FastMCP private internals.
+    # In read-only mode only email resources are registered; calendar and task
+    # resources are never created so there is nothing to tear down.
+    if read_only:
+        register_email_resources(mcp)
+    else:
+        register_email_resources(mcp)
+        register_calendar_resources(mcp)
+        register_task_resources(mcp)
+
+    # Apply read-only mode if requested (removes non-read-only tools via public API)
+    if read_only:
+        configure_read_only_mode(mcp)
 
     # Set the global default account that the lifespan will read
     _default_account = default_account
