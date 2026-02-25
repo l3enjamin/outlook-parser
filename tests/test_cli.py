@@ -18,7 +18,7 @@ sys.modules["mcp.server"] = MagicMock()
 sys.modules["mailtool.mcp.server"] = MagicMock()
 
 # Now we can safely import mailtool.cli
-from mailtool.cli import main  # noqa: E402
+from mailtool.cli import _check_platform, main  # noqa: E402
 
 
 class TestCLI(unittest.TestCase):
@@ -65,6 +65,29 @@ class TestCLI(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:  # noqa: PT027
                 main()
             self.assertEqual(cm.exception.code, 1)  # noqa: PT009
+
+    def test_check_platform_non_windows(self):
+        """Test _check_platform on non-Windows OS"""
+        with patch("sys.platform", "linux"):
+            # Capture stderr to verify error message
+            with patch("sys.stderr") as mock_stderr:
+                with self.assertRaises(SystemExit) as cm:
+                    _check_platform()
+                self.assertEqual(cm.exception.code, 1)
+
+                # Verify error message was printed
+                # mock_stderr.write is called multiple times
+                calls = mock_stderr.write.call_args_list
+                # Combine all calls to check the full message
+                full_message = "".join(call[0][0] for call in calls)
+                self.assertIn("Error: mailtool requires Windows", full_message)
+
+    def test_check_platform_windows(self):
+        """Test _check_platform on Windows OS (should pass)"""
+        # setUp already patches sys.platform to "win32", but we can be explicit
+        with patch("sys.platform", "win32"):
+            # Should not raise any exception
+            _check_platform()
 
     def test_emails_command(self):
         """Test emails command"""
