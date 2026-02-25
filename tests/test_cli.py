@@ -18,7 +18,65 @@ sys.modules["mcp.server"] = MagicMock()
 sys.modules["mailtool.mcp.server"] = MagicMock()
 
 # Now we can safely import mailtool.cli
-from mailtool.cli import _check_platform, main  # noqa: E402
+from mailtool.cli import main, _check_pywin32  # noqa: E402
+
+
+class TestPyWin32Check(unittest.TestCase):
+    def setUp(self):
+        self.stderr_patch = patch("sys.stderr")
+        self.mock_stderr = self.stderr_patch.start()
+
+    def tearDown(self):
+        self.stderr_patch.stop()
+
+    def test_check_pywin32_success(self):
+        """Test pywin32 check when package is available"""
+        with patch("importlib.util.find_spec") as mock_find_spec:
+            # Return a mock spec (not None) to simulate package presence
+            mock_find_spec.return_value = MagicMock()
+            # Should not raise any exception
+            _check_pywin32()
+            mock_find_spec.assert_called_with("win32com.client")
+
+    def test_check_pywin32_missing(self):
+        """Test pywin32 check when package is missing"""
+        with patch("importlib.util.find_spec") as mock_find_spec:
+            # Return None to simulate missing package
+            mock_find_spec.return_value = None
+
+            with self.assertRaises(SystemExit) as cm:
+                _check_pywin32()
+
+            self.assertEqual(cm.exception.code, 1)
+            # Verify error message was printed
+            self.assertTrue(self.mock_stderr.write.called)
+            # Check for key phrase in output
+            output = "".join(call.args[0] for call in self.mock_stderr.write.call_args_list)
+            self.assertIn("pywin32 is required but not installed", output)
+
+    def test_check_pywin32_import_error(self):
+        """Test pywin32 check when ImportError is raised during check"""
+        with patch("importlib.util.find_spec") as mock_find_spec:
+            mock_find_spec.side_effect = ImportError("Test Import Error")
+
+            with self.assertRaises(SystemExit) as cm:
+                _check_pywin32()
+
+            self.assertEqual(cm.exception.code, 1)
+            output = "".join(call.args[0] for call in self.mock_stderr.write.call_args_list)
+            self.assertIn("pywin32 is required but not installed", output)
+
+    def test_check_pywin32_value_error(self):
+        """Test pywin32 check when ValueError is raised during check"""
+        with patch("importlib.util.find_spec") as mock_find_spec:
+            mock_find_spec.side_effect = ValueError("Test Value Error")
+
+            with self.assertRaises(SystemExit) as cm:
+                _check_pywin32()
+
+            self.assertEqual(cm.exception.code, 1)
+            output = "".join(call.args[0] for call in self.mock_stderr.write.call_args_list)
+            self.assertIn("pywin32 is required but not installed", output)
 
 
 class TestCLI(unittest.TestCase):
