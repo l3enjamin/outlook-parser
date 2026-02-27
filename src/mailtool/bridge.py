@@ -29,6 +29,19 @@ import win32com.client
 
 logger = logging.getLogger(__name__)
 
+# MAPI Property Tags
+# Source: https://github.com/microsoft/microsoft-graph-docs/blob/main/api-reference/v1.0/resources/opentypeextension.md (and other MAPI docs)
+# We use the DASL property tag format for Table.Columns.Add
+PR_ENTRYID = "http://schemas.microsoft.com/mapi/proptag/0x0FFF0102"
+PR_SUBJECT = "http://schemas.microsoft.com/mapi/proptag/0x0037001E"
+PR_SENDER_NAME = "http://schemas.microsoft.com/mapi/proptag/0x0C1A001E"
+PR_SENT_REPRESENTING_NAME = "http://schemas.microsoft.com/mapi/proptag/0x0042001E"
+PR_SENDER_SMTP_ADDRESS = "http://schemas.microsoft.com/mapi/proptag/0x5D01001E"
+PR_MESSAGE_DELIVERY_TIME = "http://schemas.microsoft.com/mapi/proptag/0x0E060040"
+PR_HASATTACH = "http://schemas.microsoft.com/mapi/proptag/0x0E1B000B"
+PR_UNREAD = "http://schemas.microsoft.com/mapi/proptag/0x0E09000B"
+PR_INTERNET_MESSAGE_ID = "http://schemas.microsoft.com/mapi/proptag/0x1035001E"
+
 
 class OutlookBridge:
     """Bridge to Outlook application via COM"""
@@ -51,6 +64,90 @@ class OutlookBridge:
         # Catch pywintypes.com_error if available, otherwise fall back to Exception
         except Exception:
             return default
+
+    def _get_emails_from_table(self, table, limit):
+        """
+        Efficiently extract email data from a Table object
+
+        Args:
+            table: Outlook Table object
+            limit: Maximum number of emails to return
+
+        Returns:
+            List of email dictionaries
+        """
+        try:
+            # Add required columns
+            # Note: Columns MUST be added in the order we access them
+            table.Columns.Add(PR_ENTRYID)
+            table.Columns.Add(PR_SUBJECT)
+            table.Columns.Add(PR_SENT_REPRESENTING_NAME)
+            table.Columns.Add(PR_SENDER_SMTP_ADDRESS)
+            table.Columns.Add(PR_MESSAGE_DELIVERY_TIME)
+            table.Columns.Add(PR_UNREAD)
+            table.Columns.Add(PR_HASATTACH)
+        except Exception as e:
+            logger.error(f"Error adding columns to table: {e}")
+            return []
+
+        emails = []
+
+        while not table.EndOfTable:
+            if len(emails) >= limit:
+                break
+
+            remaining = limit - len(emails)
+            batch_size = min(remaining, 50)
+
+            try:
+                # Fetch a batch of rows
+                rows = table.GetArray(batch_size)
+            except Exception as e:
+                 logger.error(f"Error getting array from table: {e}")
+                 break
+
+            if not rows:
+                break
+
+            for row in rows:
+                try:
+                    # Map row values to our dictionary structure
+                    entry_id_raw = row[0]
+                    if isinstance(entry_id_raw, (bytes, bytearray)):
+                        entry_id = entry_id_raw.hex().upper()
+                    else:
+                        entry_id = str(entry_id_raw)
+
+                    subject = row[1] if row[1] else "(No Subject)"
+                    sender_name = row[2] if row[2] else ""
+                    sender_smtp = row[3] if row[3] else ""
+
+                    received_time = row[4]
+                    formatted_time = None
+                    if received_time:
+                        if hasattr(received_time, "strftime"):
+                             formatted_time = received_time.strftime("%Y-%m-%d %H:%M:%S")
+                        else:
+                             formatted_time = str(received_time)
+
+                    is_unread = bool(row[5])
+                    has_attachments = bool(row[6])
+
+                    email = {
+                        "entry_id": entry_id,
+                        "subject": subject,
+                        "sender_name": sender_name,
+                        "sender": sender_smtp,
+                        "received_time": formatted_time,
+                        "unread": is_unread,
+                        "has_attachments": has_attachments,
+                    }
+                    emails.append(email)
+                except Exception as e:
+                    logger.warning(f"Error parsing email row from table: {e}")
+                    continue
+
+        return emails
 
     def __init__(self, default_account: str | None = None):
         """
@@ -461,36 +558,44 @@ class OutlookBridge:
             if not inbox:
                 inbox = self.get_inbox()
 
-        items = inbox.Items
+        try:
+            # Use GetTable for efficient retrieval
+            # No filter creates a table of all items
+            table = inbox.GetTable()
 
-        # Sort by received time, most recent first
-        items.Sort("[ReceivedTime]", True)
+            # Sort by received time descending
+            table.Sort("[ReceivedTime]", True)
 
-        emails = []
-        count = 0
-        for item in items:
-            if count >= limit:
-                break
+            return self._get_emails_from_table(table, limit)
+        except Exception as e:
+            logger.error(f"Error listing emails with Table: {e}")
+            # Fallback to slow iteration if Table fails
+            items = inbox.Items
+            items.Sort("[ReceivedTime]", True)
 
-            try:
-                email = {
-                    "entry_id": item.EntryID,
-                    "subject": item.Subject,
-                    "sender": self.resolve_smtp_address(item),
-                    "sender_name": item.SenderName,
-                    "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
-                    if item.ReceivedTime
-                    else None,
-                    "unread": item.Unread,
-                    "has_attachments": item.Attachments.Count > 0,
-                }
-                emails.append(email)
-                count += 1
-            except Exception:
-                # Skip items that can't be accessed
-                continue
+            emails = []
+            count = 0
+            for item in items:
+                if count >= limit:
+                    break
 
-        return emails
+                try:
+                    email = {
+                        "entry_id": item.EntryID,
+                        "subject": item.Subject,
+                        "sender": self.resolve_smtp_address(item),
+                        "sender_name": item.SenderName,
+                        "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                        if item.ReceivedTime
+                        else None,
+                        "unread": item.Unread,
+                        "has_attachments": item.Attachments.Count > 0,
+                    }
+                    emails.append(email)
+                    count += 1
+                except Exception:
+                    continue
+            return emails
 
     def get_email_body(self, entry_id):
         """
@@ -1861,6 +1966,18 @@ class OutlookBridge:
                 if not mail_folder:
                     mail_folder = self.get_inbox()
 
+            try:
+                # Use GetTable for efficient retrieval with filter
+                table = mail_folder.GetTable(filter_query)
+
+                # Sort by received time descending
+                table.Sort("[ReceivedTime]", True)
+
+                return self._get_emails_from_table(table, limit)
+            except Exception:
+                # Fallback to slow iteration if Table fails
+                pass
+
             items = mail_folder.Items
             # Apply restriction filter
             items = items.Restrict(filter_query)
@@ -1988,6 +2105,26 @@ class OutlookBridge:
                 mail_folder = self.get_folder_by_name(folder)
                 if not mail_folder:
                     mail_folder = self.get_inbox()
+
+            # Try efficient Table-based search first using MAPI property filter
+            # This is vastly more efficient as it filters at the store level
+            try:
+                # Escape single quotes in email
+                safe_email = sender_email.replace("'", "''")
+
+                # Filter by SMTP address
+                # Note: Exact match on SMTP is preferred
+                filter_query = f"@SQL=\"{PR_SENDER_SMTP_ADDRESS}\" LIKE '%{safe_email}%'"
+
+                table = mail_folder.GetTable(filter_query)
+                table.Sort("[ReceivedTime]", True)
+
+                # Fetch a bit more than limit to account for loose matches if we use LIKE
+                return self._get_emails_from_table(table, limit)
+
+            except Exception:
+                # Fallback to iteration if Table filter fails
+                pass
 
             items = mail_folder.Items
             # Sort by received time, most recent first

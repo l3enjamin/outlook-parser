@@ -18,7 +18,7 @@ sys.modules["mcp.server"] = MagicMock()
 sys.modules["mailtool.mcp.server"] = MagicMock()
 
 # Now we can safely import mailtool.cli
-from mailtool.cli import main, _check_pywin32  # noqa: E402
+from mailtool.cli import main, _check_pywin32, _check_platform  # noqa: E402
 
 
 class TestPyWin32Check(unittest.TestCase):
