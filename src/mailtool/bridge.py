@@ -516,6 +516,18 @@ class OutlookBridge:
             SMTP email address string
         """
         try:
+            # Optimization: Try to get SMTP address directly from PropertyAccessor first
+            # PR_SENDER_SMTP_ADDRESS = http://schemas.microsoft.com/mapi/proptag/0x5D01001E
+            if hasattr(mail_item, "PropertyAccessor"):
+                try:
+                    smtp = mail_item.PropertyAccessor.GetProperty(
+                        "http://schemas.microsoft.com/mapi/proptag/0x5D01001E"
+                    )
+                    if smtp:
+                        return smtp
+                except Exception:
+                    pass
+
             if (
                 (
                     hasattr(mail_item, "SenderEmailType")
@@ -2132,13 +2144,39 @@ class OutlookBridge:
 
             emails = []
             count = 0
+            sender_cache = {}
+
             for item in items:
                 if count >= limit:
                     break
 
                 try:
-                    # Resolve SMTP address (handles Exchange addresses)
-                    smtp_address = self.resolve_smtp_address(item)
+                    # Optimization: Cache resolved addresses to avoid repeated expensive COM calls
+                    # For Exchange users, SenderEmailAddress is the Exchange DN (constant for same user)
+                    raw_address = (
+                        item.SenderEmailAddress
+                        if hasattr(item, "SenderEmailAddress")
+                        else None
+                    )
+
+                    if not raw_address:
+                        continue
+
+                    # Fast path: If already cached, use it
+                    if raw_address in sender_cache:
+                        smtp_address = sender_cache[raw_address]
+                    else:
+                        # Optimization: Check if it's already an SMTP address
+                        if (
+                            hasattr(item, "SenderEmailType")
+                            and item.SenderEmailType == "SMTP"
+                        ):
+                            smtp_address = raw_address
+                        else:
+                            # Resolve and cache
+                            smtp_address = self.resolve_smtp_address(item)
+
+                        sender_cache[raw_address] = smtp_address
 
                     # Case-insensitive email match
                     if smtp_address.lower() == sender_email.lower():
