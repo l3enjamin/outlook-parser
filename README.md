@@ -9,7 +9,7 @@ A Python library and CLI tool for accessing Outlook email, calendar, and tasks v
 ### 1. Prerequisites
 
 - Windows with Outlook (classic) installed and running.
-- `uv` installed (`pip install uv` or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`).
+- `uv` installed (`pip install uv` or `winget install astral-sh.uv` or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`).
 
 ### 2. Installation
 
@@ -147,6 +147,43 @@ mailtool/
 - ✅ **Secure by Default** - Defaults to read-only; requires explicit opt-in for modules.
 - ✅ **No API registration** - Uses your local Outlook authentication.
 - ✅ **O(1) Access** - Fast performance via EntryID lookups.
+
+## 📖 Command Reference
+
+This tool provides access to Outlook **Email**, **Calendar**, and **Tasks**. It is available both as an **MCP Server** (for AI agents) and a **CLI** (for manual use).
+
+### Email Management
+
+| MCP Tool | CLI Command | Description | Key Parameters |
+| :--- | :--- | :--- | :--- |
+| `list_emails` | `emails` | List emails in a folder. | `limit`, `folder`, `unread_only` |
+| `get_email` | `parsed-email`| Get full parsed details of an email. | `entry_id`, `deduplication_tier` |
+| `search_emails` | `search` | Search by subject, sender name, or body. | `subject`, `sender`, `body`, `unread` |
+| `search_emails_by_sender`| — | Recommended for specific email addresses. | `sender_email` (Exchange aware) |
+| `send_email` | `send` | Send a new email or save a draft. | `to`, `subject`, `body`, `html_body` |
+| `reply_email` | `reply` | Reply to an existing email. | `entry_id`, `body`, `reply_all` |
+| `forward_email`| `forward` | Forward an email. | `entry_id`, `to`, `body` |
+
+### Calendar Management
+
+| MCP Tool | CLI Command | Description | Key Parameters |
+| :--- | :--- | :--- | :--- |
+| `list_calendar_events` | `calendar` | List events for the next N days. | `days`, `all_events` |
+| `get_appointment` | `appointment` | Get full details/body of an event. | `entry_id` |
+| `create_appointment` | `create-appt` | Create a new calendar event. | `subject`, `start`, `end`, `location` |
+| `edit_appointment` | `edit-appt` | Modify an existing event. | `entry_id`, plus fields to change |
+| `respond_to_meeting` | `respond` | Accept/Decline/Tentative. | `entry_id`, `response` |
+
+### Task Management
+
+| MCP Tool | CLI Command | Description | Key Parameters |
+| :--- | :--- | :--- | :--- |
+| `list_tasks` | `tasks` | List incomplete tasks. | `include_completed` |
+| `get_task` | `task` | Get full task details and body. | `entry_id` |
+| `create_task` | `create-task` | Create a new task. | `subject`, `body`, `due_date`, `priority`|
+| `edit_task` | `edit-task` | Modify a task. | `entry_id`, `subject`, `body` |
+
+---
 
 ## Development
 

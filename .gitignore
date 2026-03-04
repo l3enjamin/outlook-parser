@@ -12,6 +12,9 @@ scripts/
 .claude/
 codefetch/
 
+# Gemini directories
+.gemini/
+
 # Temporary files
 *.tmp
 *.bypass

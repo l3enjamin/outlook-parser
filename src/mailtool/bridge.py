@@ -77,15 +77,18 @@ class OutlookBridge:
             List of email dictionaries
         """
         try:
+            # Clear existing columns to ensure predictable indices (0 to 6)
+            table.Columns.RemoveAll()
+
             # Add required columns
             # Note: Columns MUST be added in the order we access them
-            table.Columns.Add(PR_ENTRYID)
-            table.Columns.Add(PR_SUBJECT)
-            table.Columns.Add(PR_SENT_REPRESENTING_NAME)
-            table.Columns.Add(PR_SENDER_SMTP_ADDRESS)
-            table.Columns.Add(PR_MESSAGE_DELIVERY_TIME)
-            table.Columns.Add(PR_UNREAD)
-            table.Columns.Add(PR_HASATTACH)
+            table.Columns.Add(PR_ENTRYID)  # 0
+            table.Columns.Add(PR_SUBJECT)  # 1
+            table.Columns.Add(PR_SENT_REPRESENTING_NAME)  # 2
+            table.Columns.Add(PR_SENDER_SMTP_ADDRESS)  # 3
+            table.Columns.Add(PR_MESSAGE_DELIVERY_TIME)  # 4
+            table.Columns.Add(PR_UNREAD)  # 5
+            table.Columns.Add(PR_HASATTACH)  # 6
         except Exception as e:
             logger.error(f"Error adding columns to table: {e}")
             return []
@@ -113,8 +116,8 @@ class OutlookBridge:
                 try:
                     # Map row values to our dictionary structure
                     entry_id_raw = row[0]
-                    if isinstance(entry_id_raw, (bytes, bytearray)):
-                        entry_id = entry_id_raw.hex().upper()
+                    if isinstance(entry_id_raw, (bytes, bytearray, memoryview)):
+                        entry_id = bytes(entry_id_raw).hex().upper()
                     else:
                         entry_id = str(entry_id_raw)
 
@@ -2045,27 +2048,29 @@ class OutlookBridge:
             return self._search_emails_raw(filter_query, limit, folder=folder)
 
         filters = []
+        is_sql = False
 
         if subject:
             # Escape single quotes
             safe_subject = subject.replace("'", "''")
-            filters.append(
-                f"@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{safe_subject}%'"
-            )
+            filters.append(f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_subject}%'")
+            is_sql = True
 
         if body:
             safe_body = body.replace("'", "''")
             filters.append(
-                f"@SQL=\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_body}%'"
+                f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_body}%'"
             )
+            is_sql = True
 
         if sender:
             # Match either name or email
             safe_sender = sender.replace("'", "''")
             filters.append(
-                f"(\"@SQL=\"urn:schemas:httpmail:fromname\" LIKE '%{safe_sender}%' OR "
-                f"\"urn:schemas:httpmail:fromemail\" LIKE '%{safe_sender}%'\")"
+                f"(\"urn:schemas:httpmail:fromname\" LIKE '%{safe_sender}%' OR "
+                f"\"urn:schemas:httpmail:fromemail\" LIKE '%{safe_sender}%')"
             )
+            is_sql = True
 
         if unread is not None:
             filters.append(f"[Unread] = {'True' if unread else 'False'}")
@@ -2078,6 +2083,9 @@ class OutlookBridge:
         if not query:
             # Just list recent emails if no filters provided
             return self.list_emails(limit=limit, folder=folder)
+
+        if is_sql:
+            query = f"@SQL={query}"
 
         return self._search_emails_raw(query, limit, folder=folder)
 
