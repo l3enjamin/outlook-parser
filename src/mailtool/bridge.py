@@ -517,11 +517,10 @@ class OutlookBridge:
         """
         try:
             # Optimization: Try to get SMTP address directly from PropertyAccessor first
-            # PR_SENDER_SMTP_ADDRESS = http://schemas.microsoft.com/mapi/proptag/0x5D01001E
             if hasattr(mail_item, "PropertyAccessor"):
                 try:
                     smtp = mail_item.PropertyAccessor.GetProperty(
-                        "http://schemas.microsoft.com/mapi/proptag/0x5D01001E"
+                        PR_SENDER_SMTP_ADDRESS
                     )
                     if smtp:
                         return smtp
@@ -2153,11 +2152,7 @@ class OutlookBridge:
                 try:
                     # Optimization: Cache resolved addresses to avoid repeated expensive COM calls
                     # For Exchange users, SenderEmailAddress is the Exchange DN (constant for same user)
-                    raw_address = (
-                        item.SenderEmailAddress
-                        if hasattr(item, "SenderEmailAddress")
-                        else None
-                    )
+                    raw_address = self._safe_get_attr(item, "SenderEmailAddress")
 
                     if not raw_address:
                         continue
@@ -2167,10 +2162,8 @@ class OutlookBridge:
                         smtp_address = sender_cache[raw_address]
                     else:
                         # Optimization: Check if it's already an SMTP address
-                        if (
-                            hasattr(item, "SenderEmailType")
-                            and item.SenderEmailType == "SMTP"
-                        ):
+                        sender_type = self._safe_get_attr(item, "SenderEmailType")
+                        if sender_type == "SMTP":
                             smtp_address = raw_address
                         else:
                             # Resolve and cache
