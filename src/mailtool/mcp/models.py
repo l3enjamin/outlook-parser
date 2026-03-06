@@ -85,6 +85,11 @@ class EmailParsed(BaseModel):
         default=None,
         description="Extracted latest reply content (if deduplication is active)",
     )
+    fragments: list[str] = Field(
+        default=[],
+        description="All reply fragments in order (quoted + non-quoted) from mail-parser-reply. "
+        "Use alongside latest_reply for richer thread context.",
+    )
     deduplication_tier: str | None = Field(
         default="none",
         description="Deduplication strategy used (none, low, medium, high)",
@@ -92,6 +97,28 @@ class EmailParsed(BaseModel):
     parent_found: bool | None = Field(
         default=None,
         description="Whether the parent/quoted email was found in Outlook (for smart deduplication)",
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        description="Outlook ConversationID — stable identifier for the full thread. "
+        "Use this to group emails into the same conversation without extra calls.",
+    )
+
+
+class EmailThread(BaseModel):
+    """Full conversation thread returned by get_email_thread().
+
+    Contains all messages in the conversation in chronological order
+    (oldest first) with deduplication applied per message.
+    """
+
+    conversation_id: str | None = Field(
+        default=None,
+        description="Outlook ConversationID shared by all messages in this thread",
+    )
+    message_count: int = Field(description="Total number of messages in the thread")
+    messages: list[EmailParsed] = Field(
+        description="Chronological list of messages (oldest first), dedup applied per message"
     )
 
 

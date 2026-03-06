@@ -24,6 +24,7 @@ from mailtool.mcp.models import (
     CreateTaskResult,
     EmailParsed,
     EmailSummary,
+    EmailThread,
     FreeBusyInfo,
     OperationResult,
     SendEmailResult,
@@ -66,6 +67,7 @@ _bridge: "OutlookBridge | None" = None
 MAIL_TOOLS = {
     "list_emails",
     "get_email",
+    "get_email_thread",
     "mark_email",
     "delete_email",
     "send_email",
@@ -99,6 +101,7 @@ TASK_TOOLS = {
 READ_ONLY_TOOLS = {
     "list_emails",
     "get_email",
+    "get_email_thread",
     "search_emails",
     "search_emails_by_sender",
     "list_calendar_events",
@@ -221,7 +224,9 @@ def list_emails(
         # Note: If unread_only is True for non-Inbox, we rely on post-filtering
         # which respects the limit on FETCHED items, not returned items.
         # Ideally search_emails should support folders, but for now this covers the main use case.
-        items = bridge.list_emails(limit=limit * 2 if unread_only else limit, folder=folder)
+        items = bridge.list_emails(
+            limit=limit * 2 if unread_only else limit, folder=folder
+        )
         if unread_only:
             result = [e for e in items if e["unread"]][:limit]
         else:
@@ -644,7 +649,9 @@ def search_emails_by_sender(
     bridge = _get_bridge()
 
     # Search emails by sender via bridge
-    result = bridge.search_by_sender(sender_email=sender_email, limit=limit, folder=folder)
+    result = bridge.search_by_sender(
+        sender_email=sender_email, limit=limit, folder=folder
+    )
 
     # Convert bridge result to list of EmailSummary models
     return [
@@ -659,6 +666,78 @@ def search_emails_by_sender(
         )
         for email in result
     ]
+
+
+# ============================================================================
+# Email Thread Tool
+# ============================================================================
+
+
+@mcp.tool()
+def get_email_thread(
+    entry_id: str,
+    deduplication_tier: str = "low",
+    strip_html: bool = True,
+) -> EmailThread:
+    """Get the full conversation thread for an email.
+
+    Retrieves all messages in the same conversation (thread), oldest first,
+    with deduplication applied per message. This is the primary tool for
+    agents that need full thread context to create or update tickets (GitHub
+    Issues, Jira, Linear, etc.) without re-reading quoted history.
+
+    Uses Outlook's native GetConversation().GetTable() API — no folder
+    iteration required. Falls back to single-message response if the
+    conversation API is unavailable.
+
+    Deduplication Tiers (applied per message):
+    - 'none': Return full body of each message as-is
+    - 'low': Strip quoted content when In-Reply-To header is present (default, fast)
+    - 'medium': Strip only if parent email found in Inbox OR Sent Items
+    - 'high': Same as medium currently
+
+    Args:
+        entry_id: Outlook EntryID of any email in the thread (O(1) direct access)
+        deduplication_tier: Strategy for removing quoted text per message (default: 'low')
+        strip_html: If True, convert HTML body to plain text (default: True)
+
+    Returns:
+        EmailThread: Contains conversation_id, message_count, and chronological
+                     list of EmailParsed messages (oldest first).
+
+    Raises:
+        OutlookNotFoundError: If email not found
+        OutlookComError: If bridge is not initialized
+
+    Examples:
+        # Ticket creation workflow
+        get_email_thread(entry_id, deduplication_tier="low")
+        # → returns all messages in thread, each with only the new content
+    """
+    bridge = _get_bridge()
+
+    result = bridge.get_email_thread(
+        entry_id,
+        deduplication_tier=deduplication_tier,
+        strip_html=strip_html,
+    )
+
+    if result is None:
+        logger.error(f"Email not found: {entry_id}")
+        raise OutlookNotFoundError("Email not found", entry_id=entry_id)
+
+    messages = [EmailParsed(**msg) for msg in result["messages"]]
+
+    logger.debug(
+        f"Retrieved thread for {entry_id}: {len(messages)} messages "
+        f"(conversation_id={result['conversation_id']})"
+    )
+
+    return EmailThread(
+        conversation_id=result["conversation_id"],
+        message_count=len(messages),
+        messages=messages,
+    )
 
 
 # ============================================================================

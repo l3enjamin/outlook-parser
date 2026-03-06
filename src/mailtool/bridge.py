@@ -794,23 +794,32 @@ class OutlookBridge:
             return False
 
     def _extract_latest_reply(self, text_body):
-        """Extract latest reply using mail-parser-reply"""
+        """Extract latest reply using mail-parser-reply."""
+        result, _ = self._extract_reply_parts(text_body)
+        return result
+
+    def _extract_reply_parts(self, text_body):
+        """Extract (latest_reply, fragments) tuple using mail-parser-reply.
+
+        Returns:
+            (latest_reply: str | None, fragments: list[str])
+        """
         if not text_body:
-            return None
+            return None, []
         try:
             from mailparser_reply import EmailReplyParser
 
             parsed = EmailReplyParser.read(text_body)
-            # return the latest reply text
-            return parsed.latest_reply
+            fragments = [f.content for f in parsed.fragments if f.content]
+            return parsed.latest_reply, fragments
         except ImportError:
             logger.warning(
                 "mail-parser-reply not installed, skipping reply extraction"
             )
-            return None
+            return None, []
         except Exception as e:
-            logger.error(f"Error extracting reply: {e}")
-            return None
+            logger.error(f"Error extracting reply parts: {e}")
+            return None, []
 
     def _convert_to_parsed_model(
         self, mail, item, deduplication_tier="none", strip_html=True
@@ -858,25 +867,33 @@ class OutlookBridge:
 
         latest_reply = None
         parent_found = None
+        fragments = []
 
         should_strip = False
 
         if deduplication_tier != "none":
-            # Extract reply text candidate
-            latest_reply = self._extract_latest_reply(mail.body)
+            # Extract reply text candidate and all fragments in one pass
+            latest_reply, fragments = self._extract_reply_parts(mail.body)
 
             if deduplication_tier == "low":
-                # Low: Check In-Reply-To header in Outlook store (Inbox + Sent Items).
-                # If parent exists -> Strip.
-                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="low")
-                if parent_found:
+                # Low tier: strip unconditionally when In-Reply-To header is present.
+                # No parent lookup required — the header alone is the signal.
+                in_reply_to = None
+                if hasattr(mail, "headers") and mail.headers:
+                    in_reply_to = mail.headers.get("In-Reply-To")
+                if not in_reply_to and item:
+                    try:
+                        in_reply_to = item.PropertyAccessor.GetProperty(
+                            "http://schemas.microsoft.com/mapi/proptag/0x1042001E"
+                        )
+                    except Exception:
+                        pass
+                if in_reply_to:
                     should_strip = True
-                else:
-                    # If we can't find parent, we preserve full body
-                    should_strip = False
+                    parent_found = None  # No lookup performed at this tier
 
             elif deduplication_tier == "medium":
-                # Medium: Check In-Reply-To OR Subject
+                # Medium: Check In-Reply-To OR Subject in Inbox + Sent Items
                 parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="medium")
                 if parent_found:
                     should_strip = True
@@ -887,7 +904,13 @@ class OutlookBridge:
                 if parent_found:
                     should_strip = True
 
-        # If stripping is active and we have a reply extracted
+        # Resolve conversation_id from COM item
+        conversation_id = None
+        try:
+            conversation_id = self._safe_get_attr(item, "ConversationID")
+        except Exception:
+            pass
+
         if should_strip and latest_reply:
             final_body = latest_reply
         else:
@@ -946,8 +969,10 @@ class OutlookBridge:
             "attachments": attachments,
             "received": received,
             "latest_reply": latest_reply,
+            "fragments": fragments,
             "deduplication_tier": deduplication_tier,
             "parent_found": parent_found,
+            "conversation_id": conversation_id,
         }
 
     def _fallback_parsed_model(
@@ -1000,13 +1025,27 @@ class OutlookBridge:
 
         latest_reply = None
         parent_found = None
+        fragments = []
         should_strip = False
 
         if deduplication_tier != "none":
-            latest_reply = self._extract_latest_reply(item.Body)
+            latest_reply, fragments = self._extract_reply_parts(item.Body)
 
-            # For fallback, we only have 'item'
-            if deduplication_tier in ["low", "medium", "high"]:
+            if deduplication_tier == "low":
+                # Low tier: strip unconditionally when In-Reply-To header is present.
+                # In fallback mode, only PropertyAccessor is available for headers.
+                in_reply_to = None
+                try:
+                    in_reply_to = item.PropertyAccessor.GetProperty(
+                        "http://schemas.microsoft.com/mapi/proptag/0x1042001E"
+                    )
+                except Exception:
+                    pass
+                if in_reply_to:
+                    should_strip = True
+                    parent_found = None  # No lookup performed at this tier
+
+            elif deduplication_tier in ["medium", "high"]:
                 parent_found = self._check_parent_exists(item=item, tier=deduplication_tier)
                 if parent_found:
                     should_strip = True
@@ -1035,6 +1074,13 @@ class OutlookBridge:
             # Clear text_html
             text_html = []
 
+        # Resolve conversation_id from COM item
+        conversation_id = None
+        try:
+            conversation_id = self._safe_get_attr(item, "ConversationID")
+        except Exception:
+            pass
+
         return {
             "entry_id": item.EntryID,
             "subject": item.Subject,
@@ -1051,9 +1097,93 @@ class OutlookBridge:
             "attachments": attachments,
             "received": [],
             "latest_reply": latest_reply,
+            "fragments": fragments,
             "deduplication_tier": deduplication_tier,
             "parent_found": parent_found,
+            "conversation_id": conversation_id,
         }
+
+    def get_email_thread(
+        self,
+        entry_id,
+        deduplication_tier="low",
+        strip_html=True,
+    ):
+        """Get full conversation thread for an email.
+
+        Uses Outlook's GetConversation().GetTable() to walk the full thread
+        efficiently without iterating every folder. Returns messages in
+        chronological order (oldest first) with deduplication applied per message.
+
+        Args:
+            entry_id: Outlook EntryID of any email in the thread
+            deduplication_tier: Strategy for deduplicating quoted content per message.
+                                "none" | "low" | "medium" | "high" (default: "low")
+            strip_html: If True, convert HTML body to plain text (default: True)
+
+        Returns:
+            dict with keys:
+                - conversation_id: str | None
+                - messages: list[dict] — chronological EmailParsed dicts (oldest first)
+            Returns None if the entry_id is invalid.
+        """
+        item = self.get_item_by_id(entry_id)
+        if not item:
+            return None
+
+        # Resolve conversation_id from this item (same value on every message in thread)
+        conversation_id = self._safe_get_attr(item, "ConversationID")
+
+        try:
+            conversation = item.GetConversation()
+        except Exception as e:
+            logger.warning(f"GetConversation() failed, returning single email: {e}")
+            conversation = None
+
+        if not conversation:
+            # Fallback: no conversation object -> return just this message
+            parsed = self.get_email_parsed(
+                entry_id,
+                deduplication_tier=deduplication_tier,
+                strip_html=strip_html,
+            )
+            messages = [parsed] if parsed else []
+            return {"conversation_id": conversation_id, "messages": messages}
+
+        try:
+            table = conversation.GetTable()
+            # Sort ascending by ReceivedTime — oldest first (chronological order)
+            # Outlook Table.Sort(Property, Descending): False = ascending
+            table.Sort("[ReceivedTime]", False)
+        except Exception as e:
+            logger.error(f"Error getting conversation table: {e}")
+            parsed = self.get_email_parsed(
+                entry_id,
+                deduplication_tier=deduplication_tier,
+                strip_html=strip_html,
+            )
+            messages = [parsed] if parsed else []
+            return {"conversation_id": conversation_id, "messages": messages}
+
+        messages = []
+        while not table.EndOfTable:
+            try:
+                row = table.GetNextRow()
+                item_entry_id = row["EntryID"]
+                if not item_entry_id:
+                    continue
+                parsed = self.get_email_parsed(
+                    item_entry_id,
+                    deduplication_tier=deduplication_tier,
+                    strip_html=strip_html,
+                )
+                if parsed:
+                    messages.append(parsed)
+            except Exception as e:
+                logger.warning(f"Error processing thread item: {e}")
+                continue
+
+        return {"conversation_id": conversation_id, "messages": messages}
 
     def list_calendar_events(self, days=7, all_events=False):
         """
