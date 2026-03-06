@@ -726,6 +726,9 @@ class OutlookBridge:
         """
         Check if the parent/quoted email exists in Outlook.
         Returns True if found, False otherwise.
+
+        Searches both Inbox and Sent Items so that replies you sent are
+        also found (previously only Inbox was searched, causing ~50% miss rate).
         """
         try:
             # Tier LOW: Check via In-Reply-To header
@@ -750,17 +753,18 @@ class OutlookBridge:
                 # Clean up ID (remove < >)
                 msg_id = in_reply_to.strip("<> ")
                 if msg_id:
-                    # Search inbox (or all folders? Restrict is usually folder-bound)
-                    # For performance/simplicity, check Inbox first.
-                    inbox = self.get_inbox()
-                    if inbox:
-                        # PR_INTERNET_MESSAGE_ID = http://schemas.microsoft.com/mapi/proptag/0x1035001E
-                        # Jet query: [InternetMessageId] = 'id' (doesn't always work reliably)
-                        # DASL query is better
-                        dasl_filter = f"@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x1035001E\" = '{msg_id.replace("'", "''")}'"
-                        found_items = inbox.Items.Restrict(dasl_filter)
-                        if found_items.Count > 0:
-                            return True
+                    # DASL query is better than Jet query for InternetMessageId
+                    dasl_filter = f"@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x1035001E\" = '{msg_id.replace(\"'\", \"''\")}'"  # noqa: E501
+                    # FIX: Search Inbox AND Sent Items - parent may be a message you sent
+                    for folder in [self.get_inbox(), self.get_folder_by_name("Sent Items")]:
+                        if not folder:
+                            continue
+                        try:
+                            found_items = folder.Items.Restrict(dasl_filter)
+                            if found_items.Count > 0:
+                                return True
+                        except Exception:
+                            continue
 
             # Tier MEDIUM: Check by Subject (if low failed or not possible)
             if tier == "medium":
@@ -770,18 +774,18 @@ class OutlookBridge:
                     import re
                     clean_subject = re.sub(r"^((re|fw|fwd):\s*)+", "", subject, flags=re.IGNORECASE).strip()
                     if clean_subject:
-                        inbox = self.get_inbox()
-                        if inbox:
-                            # Search for matching subject
-                            # Use simplified check
-                            # Just try to find "Conversations" -> GetConversation() is best but complex
-                            # Let's try restrictive search
-                            # Try strict subject match of CLEAN subject
-                            # This is heuristic.
-                            # Just check if ANY item has this subject
-                            items = inbox.Items.Restrict(f"[Subject] = '{clean_subject.replace("'", "''")}'")
-                            if items.Count > 0:
-                                return True
+                        # FIX: Search Inbox AND Sent Items for subject match
+                        for folder in [self.get_inbox(), self.get_folder_by_name("Sent Items")]:
+                            if not folder:
+                                continue
+                            try:
+                                found_items = folder.Items.Restrict(
+                                    f"[Subject] = '{clean_subject.replace(\"'\", \"''\")}'"  # noqa: E501
+                                )
+                                if found_items.Count > 0:
+                                    return True
+                            except Exception:
+                                continue
 
             return False
 
@@ -862,13 +866,8 @@ class OutlookBridge:
             latest_reply = self._extract_latest_reply(mail.body)
 
             if deduplication_tier == "low":
-                # Low: Just strip (matches original remove_quoted=True behavior/default requirement)
-                # "low (default) - use only outlook specific In-Reply-To... metadata"
-                # This implies checking logic.
+                # Low: Check In-Reply-To header in Outlook store (Inbox + Sent Items).
                 # If parent exists -> Strip.
-                # If not -> Keep? Or assumes if In-Reply-To is present, it's a reply?
-                # User said "use only... metadata... medium... tries to deduplicate with same title".
-                # I will interpret "Low" as: Check In-Reply-To. If found in DB, strip.
                 parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="low")
                 if parent_found:
                     should_strip = True
