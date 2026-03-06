@@ -31,9 +31,10 @@ This project includes a Model Context Protocol (MCP) server powered by the offic
 
 ### Workspace Configuration (Gemini CLI)
 
-To use this bridge in your AI workspace, create a `.gemini/mcp.json` file in your project root. 
+To use this bridge in your AI workspace, create a `.gemini/mcp.json` file in your project root.
 
 **Requirements:**
+
 - `--account`: You MUST provide your Outlook email address or account name.
 - Feature Flags: You MUST explicitly enable modules using `--mail`, `--calendar`, or `--tasks`.
 - Permissions: By default, the server is **read-only**. Use `--rw` to enable write operations (sending, deleting, creating).
@@ -112,24 +113,24 @@ The library uses Windows COM automation to communicate with Outlook:
 1. Python creates a COM object to access the running Outlook instance.
 2. Uses O(1) direct lookups via `GetItemFromID()` for high performance even with large mailboxes.
 3. Returns structured data (emails, calendar events, tasks) as Python dictionaries or Pydantic models.
-4. MCP server mode exposes this functionality via JSON-RPC for AI agents.
+4. MCP server mode exposes this functionality via the Model Context Protocol (MCP SDK v2 / FastMCP) for AI agents.
 
 ## Project Structure
 
-```
+```text
 mailtool/
 ├── pyproject.toml          # uv project config
 ├── src/
 │   └── mailtool/
 │       ├── __init__.py
-│       ├── bridge.py       # Core COM automation (~2100 lines)
+│       ├── bridge.py       # Core COM automation (~2400 lines)
 │       ├── cli.py          # CLI interface
 │       └── mcp/            # MCP Server (SDK v2 + FastMCP)
 │           ├── __init__.py
-│           ├── server.py   # FastMCP server with 23 tools
+│           ├── server.py   # FastMCP server with 27 tools
 │           ├── models.py   # Pydantic models
 │           ├── lifespan.py # Async COM bridge lifecycle
-│           ├── resources.py # 5 resources
+│           ├── resources.py # 7 resources
 │           ├── com_state.py # Thread-safe COM state management
 │           └── exceptions.py # Custom exceptions
 └── tests/
@@ -147,6 +148,7 @@ mailtool/
 - ✅ **Secure by Default** - Defaults to read-only; requires explicit opt-in for modules.
 - ✅ **No API registration** - Uses your local Outlook authentication.
 - ✅ **O(1) Access** - Fast performance via EntryID lookups.
+- ✅ **Thread deduplication** - `get_email_thread` strips quoted history per reply, so agents read only the delta content, not the full chain repeated N times.
 
 ## 📖 Command Reference
 
@@ -157,12 +159,16 @@ This tool provides access to Outlook **Email**, **Calendar**, and **Tasks**. It 
 | MCP Tool | CLI Command | Description | Key Parameters |
 | :--- | :--- | :--- | :--- |
 | `list_emails` | `emails` | List emails in a folder. | `limit`, `folder`, `unread_only` |
-| `get_email` | `parsed-email`| Get full parsed details of an email. | `entry_id`, `deduplication_tier` |
+| `get_email` | `parsed-email` | Get full parsed details of an email. | `entry_id`, `deduplication_tier`, `strip_html` |
+| `get_email_thread` | — | **Recommended for agents.** Get full conversation thread (oldest first, dedup per message). | `entry_id`, `deduplication_tier` |
 | `search_emails` | `search` | Search by subject, sender name, or body. | `subject`, `sender`, `body`, `unread` |
-| `search_emails_by_sender`| — | Recommended for specific email addresses. | `sender_email` (Exchange aware) |
-| `send_email` | `send` | Send a new email or save a draft. | `to`, `subject`, `body`, `html_body` |
+| `search_emails_by_sender` | — | Recommended for specific email addresses (Exchange-aware). | `sender_email`, `folder` |
+| `send_email` | `send` | Send a new email or save a draft. | `to`, `subject`, `body`, `html_body`, `save_draft` |
 | `reply_email` | `reply` | Reply to an existing email. | `entry_id`, `body`, `reply_all` |
-| `forward_email`| `forward` | Forward an email. | `entry_id`, `to`, `body` |
+| `forward_email` | `forward` | Forward an email. | `entry_id`, `to`, `body` |
+| `mark_email` | — | Mark an email as read or unread. | `entry_id`, `unread` |
+| `move_email` | — | Move an email to a different folder. | `entry_id`, `folder` |
+| `delete_email` | — | Permanently delete an email. | `entry_id` |
 
 ### Calendar Management
 
@@ -173,6 +179,8 @@ This tool provides access to Outlook **Email**, **Calendar**, and **Tasks**. It 
 | `create_appointment` | `create-appt` | Create a new calendar event. | `subject`, `start`, `end`, `location` |
 | `edit_appointment` | `edit-appt` | Modify an existing event. | `entry_id`, plus fields to change |
 | `respond_to_meeting` | `respond` | Accept/Decline/Tentative. | `entry_id`, `response` |
+| `delete_appointment` | — | Permanently delete an appointment. | `entry_id` |
+| `get_free_busy` | — | Get free/busy status for an email address. | `email_address`, `start_date`, `end_date` |
 
 ### Task Management
 
@@ -180,8 +188,10 @@ This tool provides access to Outlook **Email**, **Calendar**, and **Tasks**. It 
 | :--- | :--- | :--- | :--- |
 | `list_tasks` | `tasks` | List incomplete tasks. | `include_completed` |
 | `get_task` | `task` | Get full task details and body. | `entry_id` |
-| `create_task` | `create-task` | Create a new task. | `subject`, `body`, `due_date`, `priority`|
+| `create_task` | `create-task` | Create a new task. | `subject`, `body`, `due_date`, `priority` |
 | `edit_task` | `edit-task` | Modify a task. | `entry_id`, `subject`, `body` |
+| `complete_task` | — | Mark a task as complete. | `entry_id` |
+| `delete_task` | — | Permanently delete a task. | `entry_id` |
 
 ---
 

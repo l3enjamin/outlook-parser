@@ -15,8 +15,8 @@ The core problem upstream doesn't solve well: Outlook reply chains embed the ent
 ### Approach
 
 - **Deduplication tiers**: configurable stripping of forwarded/quoted content via `deduplication_tier` in `get_email_parsed()`
-- **Structured conversation output**: planned `get_email_thread()` tool that returns a full chronological thread with per-message dedup applied, so agents get one clean artifact per conversation
-- **Agent-first field set**: the `EmailParsed` model returns `latest_reply`, `parent_found`, `deduplication_tier`, and `fragments` so agents can reason about what was deduplicated
+- **Thread tool**: `get_email_thread()` returns a full chronological thread with per-message dedup applied, so agents get one clean artifact per conversation
+- **Agent-first field set**: the `EmailParsed` model returns `latest_reply`, `fragments`, `parent_found`, `deduplication_tier`, and `conversation_id` so agents can reason about what was deduplicated and group messages by thread
 
 ---
 
@@ -28,7 +28,7 @@ The core problem upstream doesn't solve well: Outlook reply chains embed the ent
 
 - `uv run --with pywin32 -m mailtool.cli` (CLI)
 - `uv run pytest` (Tests)
-- **MCP Server** ΓåÆ `src/mailtool/mcp/server.py` ΓåÆ Claude Code / Cursor / Gemini CLI integration (26 tools, 7 resources)
+- **MCP Server** ΓåÆ `src/mailtool/mcp/server.py` ΓåÆ Claude Code / Cursor / Gemini CLI integration (27 tools, 7 resources)
 
 **Dependency Management**: Uses `uv run --with pywin32` for zero-install Windows execution
 
@@ -84,12 +84,12 @@ outlook-parser/
 Γö£ΓöÇΓöÇ src/
 Γöé   ΓööΓöÇΓöÇ mailtool/
 Γöé       Γö£ΓöÇΓöÇ __init__.py
-Γöé       Γö£ΓöÇΓöÇ bridge.py           # Core COM automation (~1400 lines)
+Γöé       Γö£ΓöÇΓöÇ bridge.py           # Core COM automation (~2400 lines)
 Γöé       Γö£ΓöÇΓöÇ cli.py              # CLI interface
 Γöé       ΓööΓöÇΓöÇ mcp/                # MCP SDK v2 package
 Γöé           Γö£ΓöÇΓöÇ __init__.py
-Γöé           Γö£ΓöÇΓöÇ server.py       # FastMCP server (26 tools, 7 resources)
-Γöé           Γö£ΓöÇΓöÇ models.py       # Pydantic models (10 models + EmailParsed)
+Γöé           Γö£ΓöÇΓöÇ server.py       # FastMCP server (27 tools, 7 resources)
+Γöé           Γö£ΓöÇΓöÇ models.py       # Pydantic models (12 models)
 Γöé           Γö£ΓöÇΓöÇ resources.py    # MCP resources (7 resources)
 Γöé           Γö£ΓöÇΓöÇ lifespan.py     # Outlook bridge lifecycle management
 Γöé           Γö£ΓöÇΓöÇ com_state.py    # COM threading state helpers
@@ -194,18 +194,18 @@ All test-created items use `[TEST]` prefix for identification and auto-cleanup. 
 
 **Key Components**:
 
-- **FastMCP Server**: `src/mailtool/mcp/server.py` ΓÇö 26 tools, 7 resources
-- **Pydantic Models**: `src/mailtool/mcp/models.py` ΓÇö 10+ models for structured output
+- **FastMCP Server**: `src/mailtool/mcp/server.py` — 27 tools, 7 resources
+- **Pydantic Models**: `src/mailtool/mcp/models.py` — 12 models for structured output
 - **MCP Resources**: `src/mailtool/mcp/resources.py` ΓÇö 7 resources
 - **Lifespan Management**: `src/mailtool/mcp/lifespan.py` ΓÇö async context manager
 - **Custom Exceptions**: `src/mailtool/mcp/exceptions.py` ΓÇö 3 exception types
 
 ### Available MCP Tools
 
-**Email (12 tools)**: `list_emails`, `list_unread_emails`, `get_email`, `get_email_parsed`, `get_email_thread`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`, `search_emails_by_sender`
+**Email (11 tools)**: `list_emails`, `get_email`, `get_email_thread`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`, `search_emails_by_sender`
 
 > `get_email_thread` is the recommended entry point for agentic ticket workflows — returns the full thread with per-message dedup, so agents see only the delta per reply.
-> `get_email_parsed` accepts `deduplication_tier` and `strip_html` params. Use for single-email access.
+> `get_email` accepts `deduplication_tier` and `strip_html` params for single-email parsed access.
 
 **Calendar (7 tools)**: `list_calendar_events`, `create_appointment`, `get_appointment`, `edit_appointment`, `respond_to_meeting`, `delete_appointment`, `get_free_busy`
 
@@ -334,7 +334,7 @@ Restart the client. Ensure Outlook is running on Windows.
 
 # Thread review
 "Summarise the email conversation about the Q1 roadmap"
-ΓåÆ agent calls get_email_thread(entry_id, deduplication_tier="low")  [planned]
+ΓåÆ agent calls get_email_thread(entry_id, deduplication_tier="low")
 ΓåÆ returns chronological thread with only delta content per reply
 ```
 
