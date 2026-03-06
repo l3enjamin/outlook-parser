@@ -412,12 +412,10 @@ class OutlookBridge:
             try:
                 return root.Folders["Tasks"]
             except Exception:
-                try:
+                with contextlib.suppress(Exception):
                     for f in root.Folders:
                         if str(f.Name).strip().lower() == "tasks":
                             return f
-                except Exception:
-                    pass
 
         try:
             return self.namespace.GetDefaultFolder(13)  # 13 = olFolderTasks

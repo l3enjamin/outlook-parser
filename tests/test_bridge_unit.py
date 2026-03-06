@@ -1,8 +1,8 @@
 """
 Unit tests for OutlookBridge helper methods.
 """
-import pytest
 from mailtool.bridge import OutlookBridge
+
 
 class TestOutlookBridgeUnit:
     """Unit tests for OutlookBridge static methods and helpers"""

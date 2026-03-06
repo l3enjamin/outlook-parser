@@ -1,8 +1,8 @@
 
 import sys
 import time
-from unittest.mock import MagicMock
 from datetime import datetime
+from unittest.mock import MagicMock
 
 # Define constants for MAPI properties to match what will be in the implementation
 PR_SENDER_SMTP_ADDRESS = "http://schemas.microsoft.com/mapi/proptag/0x5D01001E"
