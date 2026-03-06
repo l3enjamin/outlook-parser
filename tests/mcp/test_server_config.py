@@ -10,7 +10,7 @@ from mailtool.mcp.server import configure_server_features
 MOCK_MAIL_TOOLS = {"mail_ro", "mail_rw"}
 MOCK_CALENDAR_TOOLS = {"cal_ro", "cal_rw"}
 MOCK_TASK_TOOLS = {"task_ro", "task_rw"}
-MOCK_READ_ONLY_TOOLS = {"mail_ro", "cal_ro", "task_ro"}
+MOCK_READ_ONLY_TOOLS = {"mail_ro", "cal_ro", "task_ro", "get_email_thread"}
 MOCK_ALL_TOOLS = MOCK_MAIL_TOOLS | MOCK_CALENDAR_TOOLS | MOCK_TASK_TOOLS
 
 @pytest.fixture
