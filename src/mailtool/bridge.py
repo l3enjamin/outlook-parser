@@ -715,10 +715,8 @@ class OutlookBridge:
 
         finally:
             if os.path.exists(temp_path):
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(temp_path)
-                except Exception:
-                    pass
 
     def _check_parent_exists(self, mail_obj=None, item=None, tier="low"):
         """
@@ -827,10 +825,8 @@ class OutlookBridge:
                 if isinstance(r, dict):
                     received.append(r)
                 else:
-                    try:
+                    with contextlib.suppress(Exception):
                         received.append(dict(r))
-                    except Exception:
-                        pass
 
         # attachments
         # User said "leave out the attachment for now", so I will return metadata only or empty

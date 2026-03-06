@@ -143,11 +143,8 @@ def configure_server_features(
 
     for tool_name in tools_to_remove:
         logger.debug(f"Removing tool: {tool_name}")
-        try:
+        with contextlib.suppress(KeyError):
             mcp_instance.remove_tool(tool_name)
-        except KeyError:
-            # Tool might already be removed or not registered
-            pass
 
     # Register resources for enabled modules
     if enable_mail:
