@@ -1,35 +1,8 @@
 """Unit tests for MCP server configuration logic."""
 
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# Add src directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
-# Mock missing dependencies for environment without them
-if "mcp" not in sys.modules:
-    mcp_mock = MagicMock()
-    sys.modules["mcp"] = mcp_mock
-    sys.modules["mcp.server"] = MagicMock()
-    sys.modules["mcp.shared"] = MagicMock()
-    sys.modules["mcp.shared.exceptions"] = MagicMock()
-    sys.modules["mcp.types"] = MagicMock()
-
-if "pydantic" not in sys.modules:
-    pydantic_mock = MagicMock()
-    sys.modules["pydantic"] = pydantic_mock
-    # Ensure BaseModel is a class that can be inherited from
-    class BaseModel:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-    pydantic_mock.BaseModel = BaseModel
-
-if "pydantic_settings" not in sys.modules:
-    sys.modules["pydantic_settings"] = MagicMock()
 
 from mailtool.mcp.server import configure_server_features
 
