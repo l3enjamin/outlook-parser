@@ -25,6 +25,7 @@ The core problem upstream doesn't solve well: Outlook reply chains embed the ent
 **Stack**: Python 3.13+ + pywin32 (COM) ΓåÆ Outlook (Windows)
 
 **Entry Points**:
+
 - `uv run --with pywin32 -m mailtool.cli` (CLI)
 - `uv run pytest` (Tests)
 - **MCP Server** ΓåÆ `src/mailtool/mcp/server.py` ΓåÆ Claude Code / Cursor / Gemini CLI integration (26 tools, 7 resources)
@@ -34,6 +35,7 @@ The core problem upstream doesn't solve well: Outlook reply chains embed the ent
 **MCP Integration**: Model Context Protocol server using official MCP Python SDK v2 with FastMCP framework
 
 **Development Tools**:
+
 - `ruff` for linting and formatting
 - GitHub Actions CI/CD (windows-latest)
 - Pre-commit hooks for code quality
@@ -43,12 +45,15 @@ The core problem upstream doesn't solve well: Outlook reply chains embed the ent
 ## Key Design Decisions
 
 ### O(1) Access Pattern
+
 All item lookups use `GetItemFromID(entry_id)` instead of iteration. Critical for large mailboxes.
 
 ### Recurrence Handling
+
 Calendar events: enable `IncludeRecurrences = True` + `Sort("[Start]")`, then apply COM-level `Restrict` filter **before** Python iteration to avoid the "Calendar Bomb" (infinite recurring meetings).
 
 ### Deduplication Architecture
+
 `get_email_parsed()` implements a tiered deduplication strategy:
 
 | Tier | Behaviour | Use Case |
@@ -60,10 +65,11 @@ Calendar events: enable `IncludeRecurrences = True` + `Sort("[Start]")`, then ap
 
 **Important**: `tier="low"` uses the `In-Reply-To` header as the signal ΓÇö if the header exists, this is a reply and the quoted content is stripped. No local parent lookup required. `tier="medium"` adds local validation before stripping.
 
-### Known Issues (to fix)
-1. **`_check_parent_exists()` only searches Inbox** ΓÇö parent emails sent *by you* live in Sent Items. The medium/high tier parent check misses ~50% of real threads. Fix: also search `get_folder_by_name("Sent Items")`.
-2. **`tier="low"` currently gates on parent lookup** ΓÇö the current code checks `_check_parent_exists()` for `low` tier too, which contradicts the design intent above. `low` should strip unconditionally when `In-Reply-To` header is present.
-3. **No thread/conversation tool yet** ΓÇö `get_email_thread()` is planned (see below) but not yet implemented.
+### Known Issues (resolved in this branch)
+
+1. ~~**`_check_parent_exists()` only searches Inbox**~~ ✅ Fixed — now searches both Inbox **and** Sent Items.
+2. ~~**`tier="low"` currently gates on parent lookup**~~ ✅ Fixed — `low` now strips unconditionally when `In-Reply-To` header is present. No parent lookup at this tier (`parent_found = None`).
+3. ~~**No thread/conversation tool yet**~~ ✅ Implemented — `get_email_thread()` bridge method + `get_email_thread` MCP tool added.
 
 ---
 
@@ -140,40 +146,44 @@ bridge.get_email_parsed(
 | `text_html` | list[str] | Raw HTML parts (empty if `strip_html=True`) |
 | `attachments` | list[dict] | Attachment metadata (no payload) |
 | `latest_reply` | str \| None | Extracted latest reply fragment |
+| `fragments` | list[str] | All reply fragments in order (quoted + non-quoted) from mail-parser-reply |
 | `deduplication_tier` | str | Which tier was applied |
-| `parent_found` | bool \| None | Whether parent email was found locally |
+| `parent_found` | bool \| None | Parent found in Outlook (None for `low` tier — no lookup performed) |
+| `conversation_id` | str \| None | Outlook ConversationID — stable thread identifier, same across all replies |
 
 ### `_extract_latest_reply()` ΓÇö Uses `mailparser_reply`
 
 Calls `EmailReplyParser.read(text_body).latest_reply` to extract only the newest content from a reply chain. Falls back gracefully if `mailparser_reply` is not installed.
 
-### Planned: `get_email_thread()` ΓÇö Full Conversation
-
-Not yet implemented. Planned signature:
+### `get_email_thread()` — Full Conversation ✅ Implemented
 
 ```python
 bridge.get_email_thread(
     entry_id,
-    deduplication_tier="low",
+    deduplication_tier="low",  # applied per message
     strip_html=True,
 )
-# Returns: list[dict]  ΓÇö chronological list of EmailParsed dicts,
-#          one per email in the conversation thread, dedup applied per message.
+# Returns: dict {
+#   "conversation_id": str | None,
+#   "messages": list[dict]  — chronological EmailParsed dicts (oldest first)
+# }
 ```
 
-Implementation will use Outlook's `item.GetConversation().GetTable()` to walk the full thread efficiently without iterating every folder. This will be exposed as a new MCP tool `get_email_thread`.
+Implementation uses `item.GetConversation().GetTable()` to walk the full thread efficiently without iterating every folder. Falls back to single-message list if the conversation API is unavailable. Exposed as MCP tool `get_email_thread` returning `EmailThread`.
 
 ---
 
 ## API Patterns
 
 ### Return Values
+
 - **Draft emails**: Returns `EntryID` (string)
 - **Sent emails**: Returns `True`
 - **Failed ops**: Returns `False`
 - **Get ops**: Returns `dict` or `None`
 
 ### Test Isolation
+
 All test-created items use `[TEST]` prefix for identification and auto-cleanup. Tests run against real Outlook ΓÇö no mocking.
 
 ---
@@ -183,6 +193,7 @@ All test-created items use `[TEST]` prefix for identification and auto-cleanup. 
 ### FastMCP Framework
 
 **Key Components**:
+
 - **FastMCP Server**: `src/mailtool/mcp/server.py` ΓÇö 26 tools, 7 resources
 - **Pydantic Models**: `src/mailtool/mcp/models.py` ΓÇö 10+ models for structured output
 - **MCP Resources**: `src/mailtool/mcp/resources.py` ΓÇö 7 resources
@@ -191,9 +202,10 @@ All test-created items use `[TEST]` prefix for identification and auto-cleanup. 
 
 ### Available MCP Tools
 
-**Email (11 tools)**: `list_emails`, `list_unread_emails`, `get_email`, `get_email_parsed`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`, `search_emails_by_sender`
+**Email (12 tools)**: `list_emails`, `list_unread_emails`, `get_email`, `get_email_parsed`, `get_email_thread`, `send_email`, `reply_email`, `forward_email`, `mark_email`, `move_email`, `delete_email`, `search_emails`, `search_emails_by_sender`
 
-> `get_email_parsed` accepts `deduplication_tier` and `strip_html` params. Prefer this over `get_email` for agent workflows that need to create/update tickets.
+> `get_email_thread` is the recommended entry point for agentic ticket workflows — returns the full thread with per-message dedup, so agents see only the delta per reply.
+> `get_email_parsed` accepts `deduplication_tier` and `strip_html` params. Use for single-email access.
 
 **Calendar (7 tools)**: `list_calendar_events`, `create_appointment`, `get_appointment`, `edit_appointment`, `respond_to_meeting`, `delete_appointment`, `get_free_busy`
 
@@ -233,22 +245,27 @@ def get_email_parsed(
 ### Pydantic Models
 
 **Email Models**:
+
 - `EmailSummary`: 7 fields (entry_id, subject, sender, sender_name, received_time, unread, has_attachments)
 - `EmailDetails`: 8 fields (+ body, html_body)
-- `EmailParsed`: Full structured parsed email with dedup metadata (latest_reply, deduplication_tier, parent_found)
+- `EmailParsed`: Full structured parsed email with dedup metadata (latest_reply, fragments, deduplication_tier, parent_found, conversation_id)
+- `EmailThread`: Thread result model (conversation_id, message_count, messages: list[EmailParsed])
 - `SendEmailResult`: 3 fields (success, entry_id, message)
 
 **Calendar Models**:
+
 - `AppointmentSummary`: 12 fields
 - `AppointmentDetails`: 13 fields (+ body)
 - `CreateAppointmentResult`: 3 fields
 - `FreeBusyInfo`: 6 fields
 
 **Task Models**:
+
 - `TaskSummary`: 8 fields
 - `CreateTaskResult`: 3 fields
 
 **Generic**:
+
 - `OperationResult`: 2 fields (success, message)
 
 ### Lifespan Management
@@ -361,13 +378,21 @@ uv add <package>               # Add dependency
 - **Date Format**: Outlook COM filters use locale-specific formats (MM/DD/YYYY HH:MM)
 - **Sent Item ID**: Sent emails move to Sent Items with new EntryID (can't return original ID)
 - **Parallel Execution**: COM is apartment-threaded; parallel test execution not recommended
-- **`_check_parent_exists` Sent Items gap**: See Known Issues above ΓÇö medium/high tier dedup misses parent emails in Sent Items
+- **`_check_parent_exists` Sent Items gap**: ✅ Resolved — medium/high tier dedup now searches both Inbox and Sent Items
 
 ---
 
 ## Recent Changes
 
-### Fork v2.3.0 (Current)
+### Fork v2.3.0 + feature/agent-thread-dedup (Current)
+
+1. **`get_email_thread()`**: New bridge method + `get_email_thread` MCP tool. Uses `GetConversation().GetTable()` for O(N) thread traversal (no folder iteration). Returns `EmailThread` model.
+2. **`tier="low"` dedup fix**: Now strips unconditionally on `In-Reply-To` header presence. No parent lookup at this tier.
+3. **`_check_parent_exists()` Sent Items fix**: medium/high tiers search both Inbox **and** Sent Items.
+4. **`fragments[]` field**: `EmailParsed` now returns all reply fragments from `mail-parser-reply` alongside `latest_reply`. New `_extract_reply_parts()` helper consolidates the parse.
+5. **`conversation_id` field**: `EmailParsed` now returns `item.ConversationID` — stable thread identifier usable without extra calls.
+
+### Fork v2.3.0 (Base)
 
 1. **Deduplication tiers**: `get_email_parsed()` extended with `deduplication_tier` param (`none`/`low`/`medium`/`high`)
 2. **`_extract_latest_reply()`**: Uses `mailparser_reply.EmailReplyParser` to isolate latest reply content
