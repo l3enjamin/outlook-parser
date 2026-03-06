@@ -106,8 +106,8 @@ class OutlookBridge:
                 # Fetch a batch of rows
                 rows = table.GetArray(batch_size)
             except Exception as e:
-                 logger.error(f"Error getting array from table: {e}")
-                 break
+                logger.error(f"Error getting array from table: {e}")
+                break
 
             if not rows:
                 break
@@ -129,9 +129,9 @@ class OutlookBridge:
                     formatted_time = None
                     if received_time:
                         if hasattr(received_time, "strftime"):
-                             formatted_time = received_time.strftime("%Y-%m-%d %H:%M:%S")
+                            formatted_time = received_time.strftime("%Y-%m-%d %H:%M:%S")
                         else:
-                             formatted_time = str(received_time)
+                            formatted_time = str(received_time)
 
                     is_unread = bool(row[5])
                     has_attachments = bool(row[6])
@@ -674,9 +674,7 @@ class OutlookBridge:
         try:
             import mailparser
         except ImportError:
-            logger.warning(
-                "mail-parser not installed, falling back to basic parsing"
-            )
+            logger.warning("mail-parser not installed, falling back to basic parsing")
             item = self.get_item_by_id(entry_id)
             if not item:
                 return None
@@ -744,7 +742,9 @@ class OutlookBridge:
                     # PR_INTERNET_REFERENCES = http://schemas.microsoft.com/mapi/proptag/0x1039001E
                     # PR_IN_REPLY_TO_ID = http://schemas.microsoft.com/mapi/proptag/0x1042001E
                     prop_accessor = item.PropertyAccessor
-                    in_reply_to = prop_accessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x1042001E")
+                    in_reply_to = prop_accessor.GetProperty(
+                        "http://schemas.microsoft.com/mapi/proptag/0x1042001E"
+                    )
                 except Exception:
                     pass
 
@@ -753,10 +753,18 @@ class OutlookBridge:
                 # Clean up ID (remove < >)
                 msg_id = in_reply_to.strip("<> ")
                 if msg_id:
-                    # DASL query is better than Jet query for InternetMessageId
-                    dasl_filter = f"@SQL=\"http://schemas.microsoft.com/mapi/proptag/0x1035001E\" = '{msg_id.replace(\"'\", \"''\")}'"  # noqa: E501
+                    # Pre-compute the SQL-escaped message ID (single quotes doubled)
+                    # Cannot use backslash escapes inside f-string expressions before Python 3.12
+                    escaped_msg_id = msg_id.replace("'", "''")
+                    dasl_filter = (
+                        f'@SQL="http://schemas.microsoft.com/mapi/proptag/0x1035001E"'
+                        f" = '{escaped_msg_id}'"
+                    )
                     # FIX: Search Inbox AND Sent Items - parent may be a message you sent
-                    for folder in [self.get_inbox(), self.get_folder_by_name("Sent Items")]:
+                    for folder in [
+                        self.get_inbox(),
+                        self.get_folder_by_name("Sent Items"),
+                    ]:
                         if not folder:
                             continue
                         try:
@@ -768,19 +776,28 @@ class OutlookBridge:
 
             # Tier MEDIUM: Check by Subject (if low failed or not possible)
             if tier == "medium":
-                subject = getattr(mail_obj, "subject", None) or (item.Subject if item else None)
+                subject = getattr(mail_obj, "subject", None) or (
+                    item.Subject if item else None
+                )
                 if subject:
                     # Strip RE/FW prefixes
                     import re
-                    clean_subject = re.sub(r"^((re|fw|fwd):\s*)+", "", subject, flags=re.IGNORECASE).strip()
+
+                    clean_subject = re.sub(
+                        r"^((re|fw|fwd):\s*)+", "", subject, flags=re.IGNORECASE
+                    ).strip()
                     if clean_subject:
                         # FIX: Search Inbox AND Sent Items for subject match
-                        for folder in [self.get_inbox(), self.get_folder_by_name("Sent Items")]:
+                        for folder in [
+                            self.get_inbox(),
+                            self.get_folder_by_name("Sent Items"),
+                        ]:
                             if not folder:
                                 continue
                             try:
+                                escaped_subject = clean_subject.replace("'", "''")
                                 found_items = folder.Items.Restrict(
-                                    f"[Subject] = '{clean_subject.replace(\"'\", \"''\")}'"  # noqa: E501
+                                    f"[Subject] = '{escaped_subject}'"
                                 )
                                 if found_items.Count > 0:
                                     return True
@@ -813,9 +830,7 @@ class OutlookBridge:
             fragments = [f.content for f in parsed.fragments if f.content]
             return parsed.latest_reply, fragments
         except ImportError:
-            logger.warning(
-                "mail-parser-reply not installed, skipping reply extraction"
-            )
+            logger.warning("mail-parser-reply not installed, skipping reply extraction")
             return None, []
         except Exception as e:
             logger.error(f"Error extracting reply parts: {e}")
@@ -894,13 +909,17 @@ class OutlookBridge:
 
             elif deduplication_tier == "medium":
                 # Medium: Check In-Reply-To OR Subject in Inbox + Sent Items
-                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="medium")
+                parent_found = self._check_parent_exists(
+                    mail_obj=mail, item=item, tier="medium"
+                )
                 if parent_found:
                     should_strip = True
 
             elif deduplication_tier == "high":
                 # High: Same as medium for now (content search is slow/complex via COM)
-                parent_found = self._check_parent_exists(mail_obj=mail, item=item, tier="medium")
+                parent_found = self._check_parent_exists(
+                    mail_obj=mail, item=item, tier="medium"
+                )
                 if parent_found:
                     should_strip = True
 
@@ -975,9 +994,7 @@ class OutlookBridge:
             "conversation_id": conversation_id,
         }
 
-    def _fallback_parsed_model(
-        self, item, deduplication_tier="none", strip_html=True
-    ):
+    def _fallback_parsed_model(self, item, deduplication_tier="none", strip_html=True):
         """Fallback when mail-parser fails, using COM properties"""
         sender_email = self.resolve_smtp_address(item)
         sender_name = item.SenderName
@@ -1015,11 +1032,13 @@ class OutlookBridge:
             if item.Attachments.Count > 0:
                 for i in range(1, item.Attachments.Count + 1):
                     att = item.Attachments.Item(i)
-                    attachments.append({
-                        "filename": att.FileName,
-                        "size": att.Size,
-                        "content_id": self._safe_get_attr(att, "ContentID"),
-                    })
+                    attachments.append(
+                        {
+                            "filename": att.FileName,
+                            "size": att.Size,
+                            "content_id": self._safe_get_attr(att, "ContentID"),
+                        }
+                    )
         except Exception:
             pass
 
@@ -1046,7 +1065,9 @@ class OutlookBridge:
                     parent_found = None  # No lookup performed at this tier
 
             elif deduplication_tier in ["medium", "high"]:
-                parent_found = self._check_parent_exists(item=item, tier=deduplication_tier)
+                parent_found = self._check_parent_exists(
+                    item=item, tier=deduplication_tier
+                )
                 if parent_found:
                     should_strip = True
 
@@ -2216,7 +2237,9 @@ class OutlookBridge:
             filters.append(f"[Unread] = {'True' if unread else 'False'}")
 
         if has_attachments is not None:
-            filters.append(f"[HasAttachments] = {'True' if has_attachments else 'False'}")
+            filters.append(
+                f"[HasAttachments] = {'True' if has_attachments else 'False'}"
+            )
 
         query = " AND ".join(filters) if filters else ""
 
@@ -2262,7 +2285,9 @@ class OutlookBridge:
 
                 # Filter by SMTP address
                 # Note: Exact match on SMTP is preferred
-                filter_query = f"@SQL=\"{PR_SENDER_SMTP_ADDRESS}\" LIKE '%{safe_email}%'"
+                filter_query = (
+                    f"@SQL=\"{PR_SENDER_SMTP_ADDRESS}\" LIKE '%{safe_email}%'"
+                )
 
                 table = mail_folder.GetTable(filter_query)
                 table.Sort("[ReceivedTime]", True)
@@ -2315,7 +2340,9 @@ class OutlookBridge:
                             "subject": item.Subject,
                             "sender": smtp_address,
                             "sender_name": item.SenderName,
-                            "received_time": item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
+                            "received_time": item.ReceivedTime.strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
                             if item.ReceivedTime
                             else None,
                             "unread": item.Unread,
