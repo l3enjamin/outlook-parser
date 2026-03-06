@@ -412,6 +412,7 @@ class OutlookBridge:
             try:
                 return root.Folders["Tasks"]
             except Exception:
+                # Catch general Exception since we don't have pywintypes guaranteed here
                 with contextlib.suppress(Exception):
                     for f in root.Folders:
                         if str(f.Name).strip().lower() == "tasks":
