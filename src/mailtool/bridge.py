@@ -65,6 +65,21 @@ class OutlookBridge:
         except Exception:
             return default
 
+    @staticmethod
+    def _escape_dasl_query(value: str) -> str:
+        """
+        Escape single quotes for DASL/SQL queries by doubling them.
+
+        Args:
+            value: The string to escape
+
+        Returns:
+            The escaped string
+        """
+        if not value:
+            return ""
+        return str(value).replace("'", "''")
+
     def _get_emails_from_table(self, table, limit):
         """
         Efficiently extract email data from a Table object
@@ -755,7 +770,7 @@ class OutlookBridge:
                 if msg_id:
                     # Pre-compute the SQL-escaped message ID (single quotes doubled)
                     # Cannot use backslash escapes inside f-string expressions before Python 3.12
-                    escaped_msg_id = msg_id.replace("'", "''")
+                    escaped_msg_id = self._escape_dasl_query(msg_id)
                     dasl_filter = (
                         f'@SQL="http://schemas.microsoft.com/mapi/proptag/0x1035001E"'
                         f" = '{escaped_msg_id}'"
@@ -795,7 +810,7 @@ class OutlookBridge:
                             if not folder:
                                 continue
                             try:
-                                escaped_subject = clean_subject.replace("'", "''")
+                                escaped_subject = self._escape_dasl_query(clean_subject)
                                 found_items = folder.Items.Restrict(
                                     f"[Subject] = '{escaped_subject}'"
                                 )
@@ -2213,12 +2228,12 @@ class OutlookBridge:
 
         if subject:
             # Escape single quotes
-            safe_subject = subject.replace("'", "''")
+            safe_subject = self._escape_dasl_query(subject)
             filters.append(f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_subject}%'")
             is_sql = True
 
         if body:
-            safe_body = body.replace("'", "''")
+            safe_body = self._escape_dasl_query(body)
             filters.append(
                 f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_body}%'"
             )
@@ -2226,7 +2241,7 @@ class OutlookBridge:
 
         if sender:
             # Match either name or email
-            safe_sender = sender.replace("'", "''")
+            safe_sender = self._escape_dasl_query(sender)
             filters.append(
                 f"(\"urn:schemas:httpmail:fromname\" LIKE '%{safe_sender}%' OR "
                 f"\"urn:schemas:httpmail:fromemail\" LIKE '%{safe_sender}%')"
@@ -2281,7 +2296,7 @@ class OutlookBridge:
             # This is vastly more efficient as it filters at the store level
             try:
                 # Escape single quotes in email
-                safe_email = sender_email.replace("'", "''")
+                safe_email = self._escape_dasl_query(sender_email)
 
                 # Filter by SMTP address
                 # Note: Exact match on SMTP is preferred

@@ -28,6 +28,33 @@ class TestOutlookBridgeUnit:
         error_obj = ErrorObject()
         assert OutlookBridge._safe_get_attr(error_obj, "error_attr", default="error_default") == "error_default"
 
+    def test_escape_dasl_query(self):
+        """Test _escape_dasl_query escapes single quotes and handles None/empty strings"""
+
+        # Normal case
+        assert OutlookBridge._escape_dasl_query("normal") == "normal"
+
+        # Single quote
+        assert OutlookBridge._escape_dasl_query("o'reilly") == "o''reilly"
+
+        # Multiple single quotes
+        assert OutlookBridge._escape_dasl_query("'quoted'") == "''quoted''"
+
+        # Empty string
+        assert OutlookBridge._escape_dasl_query("") == ""
+
+        # None
+        assert OutlookBridge._escape_dasl_query(None) == ""
+
+        # Non-string (should be converted to string and escaped if needed)
+        assert OutlookBridge._escape_dasl_query(123) == "123"
+
+        # Single quote at start and end
+        assert OutlookBridge._escape_dasl_query("'") == "''"
+
+        # String with multiple quotes and other characters
+        assert OutlookBridge._escape_dasl_query("It's a 'test' string") == "It''s a ''test'' string"
+
         # 3. Attribute access raising specific COM error (if available)
         # Since we might be mocking win32com, let's just use a general Exception subclass
         # that mimics a COM error structure if needed, but Exception is broad enough.
