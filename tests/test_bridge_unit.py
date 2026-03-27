@@ -65,16 +65,8 @@ class TestOutlookBridgeUnit:
         assert os.path.join(download_dir, "test1.txt") in downloaded
         assert os.path.join(download_dir, "test2.txt") in downloaded
 
-        # Verify optimization: Attachments and Count should be accessed only once
-        # (Actually accessed once for the check, once for the assignment)
-        # In my optimized code:
-        # attachments = item.Attachments (1)
-        # count = attachments.Count (1)
-        # then we use local variables.
+        from unittest.mock import call
 
-        # The first check 'if not item' doesn't access attachments.
-        # Then 'attachments = item.Attachments' (access 1)
-        # Then 'count = attachments.Count' (access 1)
-
-        # Let's count calls on the mock
-        # Note: MagicMock access might differ slightly from real COM in how it's tracked
+        # Verify optimization: Attachments and Count properties were each accessed only once.
+        assert mock_item.mock_calls == [call.Attachments]
+        assert mock_attachments.mock_calls == [call.Count, call.Item(1), call.Item(2)]
