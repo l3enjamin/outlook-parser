@@ -66,7 +66,7 @@ class OutlookBridge:
             return default
 
     @staticmethod
-    def _escape_dasl_query(value: str) -> str:
+    def _escape_dasl_query(value: Any) -> str:
         """
         Escape single quotes for DASL/SQL queries by doubling them.
 
