@@ -1613,7 +1613,14 @@ class OutlookBridge:
             List of downloaded file paths
         """
         item = self.get_item_by_id(entry_id)
-        if not item or item.Attachments.Count == 0:
+        if not item:
+            return []
+
+        # Optimization: Local caching of Attachments collection and Count
+        # to avoid repeated COM property evaluation in the loop.
+        attachments = item.Attachments
+        count = attachments.Count
+        if count == 0:
             return []
 
         downloaded = []
@@ -1622,8 +1629,8 @@ class OutlookBridge:
 
             os.makedirs(download_dir, exist_ok=True)
 
-            for i in range(item.Attachments.Count):
-                attachment = item.Attachments.Item(i + 1)  # COM is 1-indexed
+            for i in range(count):
+                attachment = attachments.Item(i + 1)  # COM is 1-indexed
 
                 # Security Fix: Sanitize filename to prevent path traversal
                 # Get just the filename part, handling both / and \ regardless of platform

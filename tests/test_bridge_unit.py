@@ -32,3 +32,41 @@ class TestOutlookBridgeUnit:
         # Since we might be mocking win32com, let's just use a general Exception subclass
         # that mimics a COM error structure if needed, but Exception is broad enough.
         # The code catches Exception, so any exception works.
+
+    def test_download_attachments_optimized(self, tmp_path):
+        """Test download_attachments with the new optimized path handling"""
+        import os
+        from unittest.mock import MagicMock, patch
+
+        bridge = OutlookBridge()
+
+        # Mocking the item and attachments
+        mock_item = MagicMock()
+        mock_attachments = MagicMock()
+        mock_item.Attachments = mock_attachments
+        mock_attachments.Count = 2
+
+        att1 = MagicMock()
+        att1.FileName = "test1.txt"
+        att2 = MagicMock()
+        att2.FileName = "test2.txt"
+
+        mock_attachments.Item.side_effect = [att1, att2]
+
+        bridge.get_item_by_id = MagicMock(return_value=mock_item)
+
+        download_dir = str(tmp_path / "downloads")
+
+        # We need to patch os.path.abspath to return predictable results in the mock environment
+        with patch("os.path.abspath", side_effect=lambda x: x):
+            downloaded = bridge.download_attachments("fake_id", download_dir)
+
+        assert len(downloaded) == 2
+        assert os.path.join(download_dir, "test1.txt") in downloaded
+        assert os.path.join(download_dir, "test2.txt") in downloaded
+
+        from unittest.mock import call
+
+        # Verify optimization: Attachments and Count properties were each accessed only once.
+        assert mock_item.mock_calls == [call.Attachments]
+        assert mock_attachments.mock_calls == [call.Count, call.Item(1), call.Item(2)]
