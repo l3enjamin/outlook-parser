@@ -2180,7 +2180,6 @@ class OutlookBridge:
 
     def search_emails(
         self,
-        filter_query=None,
         limit=100,
         subject=None,
         sender=None,
@@ -2193,7 +2192,6 @@ class OutlookBridge:
         Search emails using structured criteria.
 
         Args:
-            filter_query: Raw SQL/DASL query (Unsafe, legacy support)
             limit: Max results
             subject: Subject substring to match
             sender: Sender substring to match
@@ -2205,8 +2203,6 @@ class OutlookBridge:
         Returns:
             List of email dictionaries
         """
-        if filter_query:
-            return self._search_emails_raw(filter_query, limit, folder=folder)
 
         filters = []
         is_sql = False

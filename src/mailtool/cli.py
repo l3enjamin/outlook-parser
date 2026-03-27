@@ -185,12 +185,7 @@ def _create_parser() -> argparse.ArgumentParser:
 
     # Search emails command
     search_parser = subparsers.add_parser(
-        "search", help="Search emails using Restriction"
-    )
-    search_parser.add_argument(
-        "--query",
-        required=False,
-        help="SQL filter query (Unsafe/Legacy). Use --subject/--sender/--body instead.",
+        "search", help="Search emails using structured criteria"
     )
     search_parser.add_argument(
         "--limit", type=int, default=100, help="Max results to return"
@@ -460,7 +455,6 @@ def _handle_email_commands(bridge: "OutlookBridge", args: argparse.Namespace) ->
 
     elif args.command == "search":
         emails = bridge.search_emails(
-            filter_query=args.query,
             limit=args.limit,
             subject=args.subject,
             sender=args.sender,
@@ -806,21 +800,41 @@ def main() -> None:
 
         # Dispatch to handlers
         if args.command in [
-            "emails", "email", "parsed-email", "send", "attachments",
-            "reply", "forward", "search", "folders", "set-account",
-            "mark", "move", "delete-email"
+            "emails",
+            "email",
+            "parsed-email",
+            "send",
+            "attachments",
+            "reply",
+            "forward",
+            "search",
+            "folders",
+            "set-account",
+            "mark",
+            "move",
+            "delete-email",
         ]:
             _handle_email_commands(bridge, args)
         elif args.command in [
-            "calendar", "create-appt", "appointment", "delete-appt",
-            "edit-appt", "respond", "freebusy"
+            "calendar",
+            "create-appt",
+            "appointment",
+            "delete-appt",
+            "edit-appt",
+            "respond",
+            "freebusy",
         ]:
             _handle_calendar_commands(bridge, args)
         elif args.command in [
-            "tasks", "task", "create-task", "edit-task",
-            "complete-task", "delete-task"
+            "tasks",
+            "task",
+            "create-task",
+            "edit-task",
+            "complete-task",
+            "delete-task",
         ]:
             _handle_task_commands(bridge, args)
+
 
 if __name__ == "__main__":
     main()
