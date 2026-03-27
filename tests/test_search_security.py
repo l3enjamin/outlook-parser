@@ -45,6 +45,24 @@ class TestSearchSecurity(unittest.TestCase):
         self.assertIn("TestSubject", query)
         self.assertEqual(args[1], 50)
 
+    def test_search_emails_escaping(self):
+        """Verify that special characters (single quotes) are escaped in DASL query."""
+        malicious_subject = "Project' OR '1'='1"
+        self.bridge.search_emails(subject=malicious_subject)
+
+        self.bridge._search_emails_raw.assert_called_once()
+        args, _ = self.bridge._search_emails_raw.call_args
+        query = args[0]
+
+        # Single quotes should be doubled in DASL/SQL
+        expected_escaped = "Project'' OR ''1''=''1"
+        self.assertIn(expected_escaped, query)
+        # Verify it doesn't contain the unescaped single quote that could break the query
+        # (Except where it's part of the doubled quote or the surrounding quotes of the LIKE pattern)
+        # Actually, DASL uses single quotes for string literals.
+        # The filter generated is: "urn:schemas:httpmail:subject" LIKE '%Project'' OR ''1''=''1%'
+        self.assertIn(f"LIKE '%{expected_escaped}%'", query)
+
     @patch("mailtool.bridge.OutlookBridge")
     @patch("mailtool.cli._check_platform")
     @patch("mailtool.cli._check_pywin32")
