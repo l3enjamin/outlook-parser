@@ -76,7 +76,7 @@ class OutlookBridge:
         Returns:
             The escaped string
         """
-        if not value:
+        if value is None:
             return ""
         return str(value).replace("'", "''")
 
