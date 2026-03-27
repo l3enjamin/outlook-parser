@@ -112,20 +112,17 @@ def run_optimized(bridge, limit=10, folder_name="TestFolder"):
     return end - start, len(result)
 
 if __name__ == "__main__":
-    bridge = setup_mocks(num_emails=1000)
-
     baseline_time = 0
     optimized_time = 0
 
     for _ in range(100):
+        bridge = setup_mocks(num_emails=1000)
         t, c = run_baseline(bridge, limit=50)
         baseline_time += t
 
-        # Reset mocks
         bridge = setup_mocks(num_emails=1000)
         t, c = run_optimized(bridge, limit=50)
         optimized_time += t
-        bridge = setup_mocks(num_emails=1000)
 
     print(f"Baseline Time (100 runs): {baseline_time:.6f}s")
     print(f"Optimized Time (100 runs): {optimized_time:.6f}s")
