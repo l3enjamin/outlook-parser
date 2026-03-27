@@ -810,11 +810,6 @@ class OutlookBridge:
             logger.error(f"Error checking parent existence: {e}")
             return False
 
-    def _extract_latest_reply(self, text_body):
-        """Extract latest reply using mail-parser-reply."""
-        result, _ = self._extract_reply_parts(text_body)
-        return result
-
     def _extract_reply_parts(self, text_body):
         """Extract (latest_reply, fragments) tuple using mail-parser-reply.
 

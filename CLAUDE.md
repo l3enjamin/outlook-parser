@@ -151,10 +151,6 @@ bridge.get_email_parsed(
 | `parent_found` | bool \| None | Parent found in Outlook (None for `low` tier — no lookup performed) |
 | `conversation_id` | str \| None | Outlook ConversationID — stable thread identifier, same across all replies |
 
-### `_extract_latest_reply()` ΓÇö Uses `mailparser_reply`
-
-Calls `EmailReplyParser.read(text_body).latest_reply` to extract only the newest content from a reply chain. Falls back gracefully if `mailparser_reply` is not installed.
-
 ### `get_email_thread()` — Full Conversation ✅ Implemented
 
 ```python
@@ -395,7 +391,7 @@ uv add <package>               # Add dependency
 ### Fork v2.3.0 (Base)
 
 1. **Deduplication tiers**: `get_email_parsed()` extended with `deduplication_tier` param (`none`/`low`/`medium`/`high`)
-2. **`_extract_latest_reply()`**: Uses `mailparser_reply.EmailReplyParser` to isolate latest reply content
+2. **`_extract_reply_parts()`**: Uses `mailparser_reply.EmailReplyParser` to isolate latest reply content and fragments
 3. **`_check_parent_exists()`**: Validates parent email exists before stripping (medium/high tiers)
 4. **`EmailParsed` model fields**: Added `latest_reply`, `deduplication_tier`, `parent_found` to return dict
 5. **HTML stripping**: `strip_html=True` default converts HTML body to plain text via BeautifulSoup
