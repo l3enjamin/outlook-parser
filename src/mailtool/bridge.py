@@ -715,10 +715,8 @@ class OutlookBridge:
 
         finally:
             if os.path.exists(temp_path):
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(temp_path)
-                except Exception:
-                    pass
 
     def _check_parent_exists(self, mail_obj=None, item=None, tier="low"):
         """
@@ -857,10 +855,8 @@ class OutlookBridge:
                 if isinstance(r, dict):
                     received.append(r)
                 else:
-                    try:
+                    with contextlib.suppress(Exception):
                         received.append(dict(r))
-                    except Exception:
-                        pass
 
         # attachments
         # User said "leave out the attachment for now", so I will return metadata only or empty
@@ -897,12 +893,10 @@ class OutlookBridge:
                 if hasattr(mail, "headers") and mail.headers:
                     in_reply_to = mail.headers.get("In-Reply-To")
                 if not in_reply_to and item:
-                    try:
+                    with contextlib.suppress(Exception):
                         in_reply_to = item.PropertyAccessor.GetProperty(
                             "http://schemas.microsoft.com/mapi/proptag/0x1042001E"
                         )
-                    except Exception:
-                        pass
                 if in_reply_to:
                     should_strip = True
                     parent_found = None  # No lookup performed at this tier
@@ -925,10 +919,8 @@ class OutlookBridge:
 
         # Resolve conversation_id from COM item
         conversation_id = None
-        try:
+        with contextlib.suppress(Exception):
             conversation_id = self._safe_get_attr(item, "ConversationID")
-        except Exception:
-            pass
 
         if should_strip and latest_reply:
             final_body = latest_reply
@@ -1011,14 +1003,14 @@ class OutlookBridge:
             # For fallback, just putting name in tuple is okay or split string.
             # Or just use empty list if we can't reliably get emails.
             # I'll use the strings.
-            for name in item.To.split(";"):
-                if name.strip():
-                    to_list.append((name.strip(), ""))
+            to_list.extend(
+                (name.strip(), "") for name in item.To.split(";") if name.strip()
+            )
 
         if hasattr(item, "CC") and item.CC:
-            for name in item.CC.split(";"):
-                if name.strip():
-                    cc_list.append((name.strip(), ""))
+            cc_list.extend(
+                (name.strip(), "") for name in item.CC.split(";") if name.strip()
+            )
 
         received_time = (
             item.ReceivedTime.strftime("%Y-%m-%d %H:%M:%S")
@@ -1054,12 +1046,10 @@ class OutlookBridge:
                 # Low tier: strip unconditionally when In-Reply-To header is present.
                 # In fallback mode, only PropertyAccessor is available for headers.
                 in_reply_to = None
-                try:
+                with contextlib.suppress(Exception):
                     in_reply_to = item.PropertyAccessor.GetProperty(
                         "http://schemas.microsoft.com/mapi/proptag/0x1042001E"
                     )
-                except Exception:
-                    pass
                 if in_reply_to:
                     should_strip = True
                     parent_found = None  # No lookup performed at this tier
@@ -1097,10 +1087,8 @@ class OutlookBridge:
 
         # Resolve conversation_id from COM item
         conversation_id = None
-        try:
+        with contextlib.suppress(Exception):
             conversation_id = self._safe_get_attr(item, "ConversationID")
-        except Exception:
-            pass
 
         return {
             "entry_id": item.EntryID,
@@ -2180,7 +2168,6 @@ class OutlookBridge:
 
     def search_emails(
         self,
-        filter_query=None,
         limit=100,
         subject=None,
         sender=None,
@@ -2193,7 +2180,6 @@ class OutlookBridge:
         Search emails using structured criteria.
 
         Args:
-            filter_query: Raw SQL/DASL query (Unsafe, legacy support)
             limit: Max results
             subject: Subject substring to match
             sender: Sender substring to match
@@ -2205,50 +2191,45 @@ class OutlookBridge:
         Returns:
             List of email dictionaries
         """
-        if filter_query:
-            return self._search_emails_raw(filter_query, limit, folder=folder)
-
         filters = []
-        is_sql = False
 
         if subject:
-            # Escape single quotes
+            # Escape single quotes and use DASL LIKE filter
             safe_subject = subject.replace("'", "''")
             filters.append(f"\"urn:schemas:httpmail:subject\" LIKE '%{safe_subject}%'")
-            is_sql = True
 
         if body:
             safe_body = body.replace("'", "''")
             filters.append(
                 f"\"urn:schemas:httpmail:textdescription\" LIKE '%{safe_body}%'"
             )
-            is_sql = True
 
         if sender:
-            # Match either name or email
+            # Match either name or email using DASL properties
             safe_sender = sender.replace("'", "''")
             filters.append(
                 f"(\"urn:schemas:httpmail:fromname\" LIKE '%{safe_sender}%' OR "
                 f"\"urn:schemas:httpmail:fromemail\" LIKE '%{safe_sender}%')"
             )
-            is_sql = True
 
         if unread is not None:
-            filters.append(f"[Unread] = {'True' if unread else 'False'}")
+            # Use standard DASL property for read status (1 for Read, 0 for Unread)
+            # So unread=True filters for read=0
+            filters.append(f'"urn:schemas:httpmail:read" = {0 if unread else 1}')
 
         if has_attachments is not None:
+            # Use standard DASL property for attachments
             filters.append(
-                f"[HasAttachments] = {'True' if has_attachments else 'False'}"
+                f'"urn:schemas:httpmail:hasattachment" = {1 if has_attachments else 0}'
             )
 
-        query = " AND ".join(filters) if filters else ""
-
-        if not query:
+        if not filters:
             # Just list recent emails if no filters provided
             return self.list_emails(limit=limit, folder=folder)
 
-        if is_sql:
-            query = f"@SQL={query}"
+        # Build full DASL query prefixed with @SQL=
+        # This ensures all structured criteria are handled securely within a single query
+        query = f"@SQL={' AND '.join(filters)}"
 
         return self._search_emails_raw(query, limit, folder=folder)
 
