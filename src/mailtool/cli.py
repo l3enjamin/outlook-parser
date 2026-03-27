@@ -188,11 +188,6 @@ def _create_parser() -> argparse.ArgumentParser:
         "search", help="Search emails using Restriction"
     )
     search_parser.add_argument(
-        "--query",
-        required=False,
-        help="SQL filter query (Unsafe/Legacy). Use --subject/--sender/--body instead.",
-    )
-    search_parser.add_argument(
         "--limit", type=int, default=100, help="Max results to return"
     )
     search_parser.add_argument("--subject", help="Search subject")
@@ -460,7 +455,6 @@ def _handle_email_commands(bridge: "OutlookBridge", args: argparse.Namespace) ->
 
     elif args.command == "search":
         emails = bridge.search_emails(
-            filter_query=args.query,
             limit=args.limit,
             subject=args.subject,
             sender=args.sender,
