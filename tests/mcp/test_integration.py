@@ -283,7 +283,7 @@ class TestEmailWorkflow:
         """Test searching for specific emails"""
         # Search for project-related emails
         results = server.search_emails(
-            filter_query="[Subject] LIKE '%Project%'", limit=10
+            subject="Project", limit=10
         )
         assert len(results) >= 1
         assert isinstance(results[0], EmailSummary)
