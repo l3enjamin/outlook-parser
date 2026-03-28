@@ -216,21 +216,12 @@ def list_emails(
     # Get bridge from module-level state
     bridge = _get_bridge()
 
-    if unread_only and folder == "Inbox":
-        # Use optimized search for unread inbox emails
-        result = bridge.search_emails(unread=True, limit=limit)
+    if unread_only:
+        # Use optimized search for unread emails, delegating filtering to COM
+        result = bridge.search_emails(unread=True, limit=limit, folder=folder)
     else:
-        # For other folders or all emails, use standard list
-        # Note: If unread_only is True for non-Inbox, we rely on post-filtering
-        # which respects the limit on FETCHED items, not returned items.
-        # Ideally search_emails should support folders, but for now this covers the main use case.
-        items = bridge.list_emails(
-            limit=limit * 2 if unread_only else limit, folder=folder
-        )
-        if unread_only:
-            result = [e for e in items if e["unread"]][:limit]
-        else:
-            result = items
+        # For all emails, use standard list
+        result = bridge.list_emails(limit=limit, folder=folder)
 
     # Convert bridge result to list of EmailSummary models
     return [
